@@ -1,0 +1,1315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<meta name="theme-color" content="#020c1b"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-title" content="R-Weathers"/>
+<title>R-Weathers</title>
+<link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@100;200;300;400;500;600;700;800;900&family=Share+Tech+Mono&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js"></script>
+<style>
+:root{
+  --accent:#38bdf8;--text:#e8f0ff;--muted:rgba(232,240,255,.52);
+  --glass:rgba(8,20,50,.45);--gb:rgba(255,255,255,.1);
+  --blur:blur(22px);--r:22px;--rsm:13px;
+  --sh:0 24px 80px rgba(0,0,0,.65);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:'Exo 2',sans-serif;color:var(--text);min-height:100vh;overflow-x:hidden;background:#020c1b;}
+
+/* ── Canvas layers ──────────────────── */
+#skyCanvas,#cloudCanvas,#partCanvas{position:fixed;inset:0;width:100%;height:100%;}
+#skyCanvas{z-index:0;}
+#cloudCanvas{z-index:1;pointer-events:none;}
+#partCanvas{z-index:2;pointer-events:none;}
+
+/* ── Atmospheric overlay (fog/haze) ── */
+#atmOverlay{
+  position:fixed;inset:0;z-index:3;pointer-events:none;
+  opacity:0;transition:opacity 2.5s ease;
+}
+#atmOverlay.on{opacity:1;}
+
+/* ── Lightning ──────────────────────── */
+#lCanvas{position:fixed;inset:0;z-index:4;pointer-events:none;}
+#flashDiv{
+  position:fixed;inset:0;z-index:5;pointer-events:none;
+  opacity:0;background:rgba(210,230,255,.06);
+}
+.do-flash{animation:flashAnim .28s ease-out forwards;}
+@keyframes flashAnim{0%{opacity:0}8%{opacity:1}25%{opacity:0}55%{opacity:.55}100%{opacity:0}}
+
+/* ── Film grain ─────────────────────── */
+#grain{
+  position:fixed;inset:0;z-index:6;pointer-events:none;opacity:.028;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size:160px;animation:grainMove .35s steps(1) infinite;
+}
+@keyframes grainMove{0%{background-position:0 0}25%{background-position:-55px -35px}50%{background-position:25px 55px}75%{background-position:-15px 35px}}
+
+/* ── Vignette ───────────────────────── */
+#vignette{
+  position:fixed;inset:0;z-index:7;pointer-events:none;
+  background:radial-gradient(ellipse 90% 90% at 50% 50%,transparent 55%,rgba(0,0,0,.55) 100%);
+}
+
+/* ── App layout ─────────────────────── */
+.app{
+  position:relative;z-index:10;max-width:700px;margin:0 auto;
+  padding:1.8rem 1rem 4rem;
+  display:flex;flex-direction:column;align-items:center;min-height:100vh;
+}
+
+/* ── Header ─────────────────────────── */
+.hdr{text-align:center;margin-bottom:2rem;animation:dropIn .9s cubic-bezier(.22,1,.36,1) both;}
+@keyframes dropIn{from{opacity:0;transform:translateY(-28px)}to{opacity:1;transform:translateY(0)}}
+.logo-wrap{display:flex;align-items:center;justify-content:center;gap:.5rem;margin-bottom:.22rem}
+.logo-svg{width:46px;height:46px;filter:drop-shadow(0 0 16px rgba(56,189,248,.75));animation:logoFloat 5s ease-in-out infinite;}
+@keyframes logoFloat{0%,100%{transform:translateY(0) rotate(-3deg)}50%{transform:translateY(-8px) rotate(3deg)}}
+.logo-name{
+  font-size:clamp(2rem,7vw,3.5rem);font-weight:900;letter-spacing:-2.5px;
+  background:linear-gradient(110deg,#fff 0%,#7dd3fc 40%,#38bdf8 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+}
+.logo-badge{
+  font-family:'Share Tech Mono',monospace;font-size:.58rem;letter-spacing:.12em;
+  color:var(--accent);background:rgba(56,189,248,.1);
+  border:1px solid rgba(56,189,248,.3);border-radius:4px;
+  padding:.13rem .48rem;margin-left:.3rem;align-self:flex-start;margin-top:.55rem;
+}
+.logo-sub{font-size:.76rem;font-weight:300;color:var(--muted);letter-spacing:.18em;text-transform:uppercase;}
+
+/* ── Search ─────────────────────────── */
+.search-area{width:100%;max-width:580px;margin-bottom:.8rem;animation:riseUp .7s .15s ease both;}
+@keyframes riseUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+.s-row{display:flex;gap:.55rem;flex-wrap:wrap;}
+.s-shell{
+  flex:1;min-width:190px;
+  background:rgba(8,20,50,.55);
+  border:1.5px solid rgba(255,255,255,.14);
+  backdrop-filter:var(--blur);border-radius:var(--r);
+  display:flex;align-items:center;padding:0 1.1rem;
+  transition:border-color .3s,box-shadow .3s;position:relative;overflow:hidden;
+}
+.s-shell::after{
+  content:'';position:absolute;bottom:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,var(--accent),transparent);
+  transform:scaleX(0);transition:transform .4s;
+}
+.s-shell:focus-within::after{transform:scaleX(1);}
+.s-shell:focus-within{border-color:rgba(56,189,248,.55);box-shadow:0 0 0 3px rgba(56,189,248,.1),0 12px 40px rgba(0,0,0,.45);}
+.s-ico{width:15px;height:15px;opacity:.35;margin-right:.6rem;flex-shrink:0;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;}
+#cityInput{flex:1;background:none;border:none;outline:none;color:var(--text);font-family:'Exo 2',sans-serif;font-size:.95rem;font-weight:400;padding:.9rem 0;}
+#cityInput::placeholder{color:rgba(232,240,255,.3);font-weight:200;}
+.btn{
+  padding:.85rem 1.35rem;border:none;border-radius:var(--r);
+  font-family:'Exo 2',sans-serif;font-weight:700;font-size:.85rem;letter-spacing:.04em;
+  cursor:pointer;transition:all .22s;white-space:nowrap;position:relative;overflow:hidden;
+}
+.btn:active{transform:scale(.96);}
+.btn-go{background:linear-gradient(135deg,#0ea5e9,#0284c7);color:#fff;box-shadow:0 4px 22px rgba(14,165,233,.45);}
+.btn-go:hover{transform:translateY(-2px);box-shadow:0 8px 32px rgba(14,165,233,.55);}
+.btn-loc{background:rgba(8,20,50,.55);border:1.5px solid rgba(255,255,255,.13);backdrop-filter:var(--blur);color:var(--text);}
+.btn-loc:hover{background:rgba(255,255,255,.1);transform:translateY(-2px);}
+.chips{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.55rem;}
+.chip{
+  background:rgba(8,20,50,.5);border:1px solid rgba(255,255,255,.1);
+  border-radius:50px;padding:.28rem .8rem;font-size:.72rem;font-weight:500;color:var(--muted);
+  cursor:pointer;transition:all .2s;backdrop-filter:blur(8px);
+}
+.chip:hover{background:rgba(56,189,248,.15);border-color:rgba(56,189,248,.4);color:var(--accent);transform:translateY(-1px);}
+.last-chip{
+  display:none;align-items:center;gap:.45rem;
+  background:rgba(56,189,248,.08);border:1px solid rgba(56,189,248,.22);
+  border-radius:50px;padding:.3rem .9rem .3rem .65rem;
+  font-size:.73rem;color:var(--accent);cursor:pointer;margin-bottom:1rem;transition:background .2s;
+}
+.last-chip.vis{display:inline-flex;}
+.last-chip:hover{background:rgba(56,189,248,.16);}
+.lc-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);animation:blinkDot 2.2s infinite;}
+@keyframes blinkDot{0%,100%{opacity:1}50%{opacity:.15}}
+
+/* Unit toggle */
+.unit-row{display:flex;background:rgba(8,20,50,.5);border:1px solid rgba(255,255,255,.1);border-radius:50px;padding:3px;margin-bottom:1.4rem;backdrop-filter:var(--blur);}
+.u-btn{padding:.32rem .85rem;border:none;border-radius:50px;font-family:'Exo 2',sans-serif;font-size:.78rem;font-weight:700;background:none;color:var(--muted);cursor:pointer;transition:all .28s;}
+.u-btn.on{background:var(--accent);color:#020c1b;box-shadow:0 2px 12px rgba(56,189,248,.4);}
+
+/* Spinner */
+.spin-box{display:none;flex-direction:column;align-items:center;gap:.9rem;margin:2.5rem 0;}
+.spin-box.on{display:flex;}
+.spin-ring{width:54px;height:54px;border-radius:50%;border:2px solid rgba(255,255,255,.07);border-top-color:var(--accent);border-right-color:rgba(56,189,248,.3);animation:spinIt .85s linear infinite;}
+@keyframes spinIt{to{transform:rotate(360deg)}}
+.spin-txt{font-family:'Share Tech Mono',monospace;font-size:.72rem;color:var(--muted);letter-spacing:.14em;text-transform:uppercase;animation:pulseOp 1.6s ease-in-out infinite;}
+@keyframes pulseOp{0%,100%{opacity:.4}50%{opacity:1}}
+
+/* Error */
+.err-box{display:none;align-items:center;gap:.9rem;background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.28);backdrop-filter:var(--blur);border-radius:var(--rsm);padding:1rem 1.3rem;width:100%;max-width:580px;margin-bottom:1rem;animation:fadeUp .4s ease;}
+.err-box.on{display:flex;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.err-ico{font-size:1.5rem;}
+.err-msg{font-size:.86rem;color:#fca5a5;line-height:1.45;}
+.err-title{font-weight:700;margin-bottom:.18rem;color:#f87171;}
+
+/* Alert */
+.alert-bar{display:none;align-items:center;gap:.8rem;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);backdrop-filter:var(--blur);border-radius:var(--rsm);padding:.9rem 1.2rem;width:100%;max-width:580px;margin-bottom:.9rem;}
+.alert-bar.on{display:flex;}
+.alert-ico{font-size:1.4rem;animation:shk 1.2s ease infinite;}
+@keyframes shk{0%,100%{transform:rotate(0)}20%{transform:rotate(-12deg)}40%{transform:rotate(12deg)}60%{transform:rotate(-8deg)}80%{transform:rotate(8deg)}}
+.alert-txt{font-size:.82rem;color:#fcd34d;line-height:1.4;}
+.alert-head{font-weight:700;margin-bottom:.15rem;}
+
+/* ── Glass cards ────────────────────── */
+.w-card,.fc-card,.map-card{
+  background:rgba(5,15,40,.52);
+  border:1.5px solid rgba(255,255,255,.13);
+  backdrop-filter:blur(26px);border-radius:var(--r);box-shadow:var(--sh);
+  width:100%;max-width:580px;margin-bottom:.9rem;
+  position:relative;overflow:hidden;
+}
+.w-card::before,.fc-card::before,.map-card::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.3),transparent);
+}
+.w-card{display:none;padding:1.8rem;}
+.w-card.on{display:block;animation:cardPop .65s cubic-bezier(.22,1,.36,1) both;}
+@keyframes cardPop{from{opacity:0;transform:translateY(26px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+.fc-card{display:none;padding:1.4rem;}
+.fc-card.on{display:block;animation:cardPop .7s .08s cubic-bezier(.22,1,.36,1) both;}
+.map-card{display:none;padding:1.3rem;}
+.map-card.on{display:block;animation:cardPop .75s .15s cubic-bezier(.22,1,.36,1) both;}
+
+/* Card internals */
+.c-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem;}
+.c-city{font-size:clamp(1.5rem,5vw,2rem);font-weight:800;letter-spacing:-.8px;line-height:1.05;}
+.c-meta{font-family:'Share Tech Mono',monospace;font-size:.67rem;color:var(--muted);display:flex;flex-wrap:wrap;gap:.6rem;margin-top:.28rem;letter-spacing:.04em;}
+#lottieWrap{width:96px;height:96px;flex-shrink:0;margin-left:.5rem;}
+.t-row{display:flex;align-items:flex-start;gap:1rem;margin:.8rem 0;}
+.t-main{font-size:clamp(4.5rem,15vw,7.5rem);font-weight:900;line-height:1;letter-spacing:-5px;}
+.t-sup{font-size:clamp(1.6rem,5vw,2.8rem);font-weight:200;opacity:.65;vertical-align:super;letter-spacing:0;}
+.t-side{padding-top:.5rem;display:flex;flex-direction:column;gap:.35rem;}
+.t-feels{font-size:.78rem;color:var(--muted);font-weight:300;}
+.t-range{font-size:.88rem;font-weight:700;display:flex;gap:.5rem;}
+.t-hi{color:#fb923c;}.t-lo{color:#60a5fa;}
+.t-desc{font-size:.78rem;color:var(--muted);}
+.cond-p{display:inline-flex;align-items:center;gap:.45rem;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-radius:50px;padding:.3rem .9rem;font-size:.8rem;font-weight:600;margin-bottom:1.3rem;width:fit-content;}
+.cond-led{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);animation:ledBlink 2.5s ease-in-out infinite;}
+@keyframes ledBlink{0%,100%{opacity:1;box-shadow:0 0 8px var(--accent)}50%{opacity:.3;box-shadow:none}}
+.stats-g{display:grid;grid-template-columns:repeat(3,1fr);gap:.65rem;margin-bottom:1.1rem;}
+.st{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:var(--rsm);padding:.8rem .9rem;display:flex;flex-direction:column;gap:.28rem;transition:background .22s,transform .22s;}
+.st:hover{background:rgba(255,255,255,.1);transform:translateY(-2px);}
+.st-i{font-size:1rem;}.st-l{font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;font-weight:600;}
+.st-v{font-family:'Share Tech Mono',monospace;font-size:.95rem;font-weight:500;}
+.uv-wrap{margin-bottom:1.1rem;}
+.sec-label{font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;font-weight:600;margin-bottom:.45rem;}
+.uv-track{height:7px;border-radius:50px;background:linear-gradient(to right,#22c55e,#eab308,#f97316,#ef4444,#a855f7);position:relative;}
+.uv-knob{position:absolute;top:50%;width:13px;height:13px;border-radius:50%;background:#fff;border:2px solid rgba(0,0,0,.35);transform:translate(-50%,-50%);box-shadow:0 0 8px rgba(0,0,0,.5);transition:left .9s cubic-bezier(.4,0,.2,1);}
+.uv-info{font-size:.76rem;color:var(--muted);margin-top:.35rem;}
+.solar-wrap{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:var(--rsm);padding:.9rem 1.1rem;margin-bottom:1.1rem;}
+.solar-svg{width:100%;display:block;margin:0 auto;max-width:380px;}
+.solar-times{display:flex;justify-content:space-between;margin-top:.4rem;}
+.sol-item{text-align:center;}.sol-lbl{font-size:.65rem;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;}
+.sol-val{font-family:'Share Tech Mono',monospace;font-size:.88rem;font-weight:500;color:#fbbf24;}
+.hourly-wrap{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:var(--rsm);padding:.9rem;margin-bottom:1.1rem;}
+.h-scroll{display:flex;gap:.55rem;overflow-x:auto;scrollbar-width:none;padding-bottom:.15rem;}
+.h-scroll::-webkit-scrollbar{display:none;}
+.h-item{flex:0 0 auto;min-width:62px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:var(--rsm);padding:.55rem .7rem;display:flex;flex-direction:column;align-items:center;gap:.3rem;transition:all .2s;}
+.h-item:hover{background:rgba(255,255,255,.12);transform:translateY(-2px);}
+.h-item.now{border-color:rgba(56,189,248,.45);background:rgba(56,189,248,.1);}
+.h-t{font-family:'Share Tech Mono',monospace;font-size:.62rem;color:var(--muted);letter-spacing:.03em;}
+.h-e{font-size:1.15rem;}.h-v{font-size:.82rem;font-weight:700;}.h-p{font-size:.62rem;color:#60a5fa;}
+.wind-wrap{display:grid;grid-template-columns:90px 1fr;gap:1rem;align-items:center;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:var(--rsm);padding:1rem;margin-bottom:1.1rem;}
+.cmps{width:90px;height:90px;position:relative;}
+.cmps-ring{width:100%;height:100%;border-radius:50%;border:1.5px solid rgba(255,255,255,.15);background:radial-gradient(circle,rgba(56,189,248,.04) 0%,transparent 70%);position:relative;}
+.cmps-ring::before{content:'';position:absolute;inset:0;border-radius:50%;background:linear-gradient(0deg,transparent 48%,rgba(255,255,255,.15) 48%,rgba(255,255,255,.15) 52%,transparent 52%),linear-gradient(90deg,transparent 48%,rgba(255,255,255,.1) 48%,rgba(255,255,255,.1) 52%,transparent 52%);}
+.cmps-d{position:absolute;font-size:.6rem;font-weight:700;color:var(--muted);font-family:'Share Tech Mono',monospace;}
+.cmps-d.n{top:3px;left:50%;transform:translateX(-50%);color:var(--accent);}
+.cmps-d.s{bottom:3px;left:50%;transform:translateX(-50%);}
+.cmps-d.e{right:4px;top:50%;transform:translateY(-50%);}
+.cmps-d.w{left:4px;top:50%;transform:translateY(-50%);}
+.needle-n{position:absolute;top:50%;left:50%;width:3px;height:38%;transform-origin:bottom center;transform:translateX(-50%) translateY(-100%);background:linear-gradient(to top,var(--accent),rgba(56,189,248,.25));transition:transform 1.1s cubic-bezier(.4,0,.2,1);border-radius:4px 4px 0 0;}
+.needle-s{position:absolute;top:50%;left:50%;width:3px;height:28%;transform-origin:top center;transform:translateX(-50%);background:rgba(255,255,255,.2);border-radius:0 0 4px 4px;transition:transform 1.1s cubic-bezier(.4,0,.2,1);}
+.cmps-ctr{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent),0 0 20px rgba(56,189,248,.4);}
+.wind-info{display:flex;flex-direction:column;gap:.38rem;}
+.wi-speed{font-family:'Share Tech Mono',monospace;font-size:1.7rem;letter-spacing:-1px;line-height:1;}
+.wi-unit{font-size:.85rem;opacity:.5;}
+.wi-dir{font-size:.78rem;color:var(--muted);}
+.wi-gust{font-size:.75rem;color:rgba(251,146,60,.8);}
+.wi-bft{font-size:.7rem;background:rgba(255,255,255,.08);border-radius:50px;padding:.18rem .6rem;width:fit-content;color:var(--muted);}
+.fc-row{display:flex;gap:.6rem;overflow-x:auto;scrollbar-width:none;padding-bottom:.1rem;}
+.fc-row::-webkit-scrollbar{display:none;}
+.fc-day{flex:0 0 auto;min-width:90px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);border-radius:var(--rsm);padding:.85rem .6rem;display:flex;flex-direction:column;align-items:center;gap:.38rem;transition:all .22s;cursor:default;}
+.fc-day:hover{background:rgba(255,255,255,.11);transform:translateY(-3px);border-color:rgba(255,255,255,.18);}
+.fc-day.tod{border-color:rgba(56,189,248,.38);background:rgba(56,189,248,.07);}
+.fc-dn{font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--muted);}
+.fc-dd{font-size:.6rem;color:rgba(232,240,255,.28);font-family:'Share Tech Mono',monospace;}
+.fc-ico{font-size:1.65rem;}
+.fc-t{display:flex;gap:.38rem;font-size:.8rem;font-weight:700;}
+.fc-hi{color:#fb923c;}.fc-lo{color:#60a5fa;}
+.fc-ds{font-size:.63rem;color:var(--muted);text-align:center;line-height:1.3;}
+.fc-pop{font-size:.65rem;color:#60a5fa;}
+.mini-row{display:grid;grid-template-columns:1fr 1fr;gap:.7rem;width:100%;max-width:580px;margin-bottom:.9rem;opacity:0;}
+.mini-row.on{opacity:1;animation:cardPop .75s .12s cubic-bezier(.22,1,.36,1) both;}
+.mc{background:rgba(5,15,40,.52);border:1.5px solid rgba(255,255,255,.13);backdrop-filter:blur(26px);border-radius:var(--rsm);padding:1.1rem;position:relative;overflow:hidden;transition:all .22s;}
+.mc::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.2),transparent);}
+.mc:hover{background:rgba(255,255,255,.07);transform:translateY(-2px);}
+.mc-title{font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;font-weight:600;margin-bottom:.6rem;}
+.mc-big{font-size:1.75rem;font-weight:800;font-family:'Share Tech Mono',monospace;line-height:1;}
+.mc-sub{font-size:.72rem;color:var(--muted);margin-top:.28rem;}
+.hring-wrap{display:flex;align-items:center;gap:.75rem;}
+.hring-svg{width:62px;height:62px;flex-shrink:0;}
+.hring-bg{fill:none;stroke:rgba(255,255,255,.09);stroke-width:5;}
+.hring-fg{fill:none;stroke:var(--accent);stroke-width:5;stroke-linecap:round;transform:rotate(-90deg);transform-origin:31px 31px;transition:stroke-dashoffset 1.1s cubic-bezier(.4,0,.2,1);}
+.hring-val{font-size:1.5rem;font-weight:800;font-family:'Share Tech Mono',monospace;}
+.hring-lbl{font-size:.68rem;color:var(--muted);}
+.map-box{position:relative;height:130px;background:rgba(0,0,0,.3);border-radius:var(--rsm);overflow:hidden;border:1px solid rgba(255,255,255,.07);}
+.map-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(56,189,248,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(56,189,248,.05) 1px,transparent 1px);background-size:38px 38px;}
+.map-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:.35rem;font-size:.72rem;color:var(--muted);}
+.map-pin{position:absolute;width:14px;height:14px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px rgba(56,189,248,.22),0 0 22px rgba(56,189,248,.5);transform:translate(-50%,-50%);display:none;animation:pinPulse 2.2s ease-in-out infinite;}
+@keyframes pinPulse{0%,100%{box-shadow:0 0 0 4px rgba(56,189,248,.22),0 0 22px rgba(56,189,248,.5)}50%{box-shadow:0 0 0 9px rgba(56,189,248,.1),0 0 35px rgba(56,189,248,.7)}}
+.map-meta{display:flex;justify-content:space-between;margin-top:.5rem;font-family:'Share Tech Mono',monospace;font-size:.67rem;color:var(--muted);}
+.act-row{display:none;flex-wrap:wrap;gap:.55rem;justify-content:center;width:100%;max-width:580px;margin-bottom:1.8rem;}
+.act-row.on{display:flex;}
+.act-btn{padding:.5rem 1rem;border:none;border-radius:50px;font-family:'Exo 2',sans-serif;font-size:.76rem;font-weight:600;background:rgba(8,20,50,.55);border:1px solid rgba(255,255,255,.12);backdrop-filter:var(--blur);color:var(--text);cursor:pointer;transition:all .2s;}
+.act-btn:hover{background:rgba(255,255,255,.1);transform:translateY(-1px);}
+.footer{text-align:center;font-family:'Share Tech Mono',monospace;font-size:.65rem;color:rgba(232,240,255,.2);letter-spacing:.08em;margin-top:auto;padding-top:1rem;}
+
+@media(max-width:500px){
+  .stats-g{grid-template-columns:repeat(2,1fr);}
+  .mini-row{grid-template-columns:1fr;}
+  #lottieWrap{width:78px;height:78px;}
+  .wind-wrap{grid-template-columns:1fr;justify-items:center;}
+  .btn{padding:.78rem .95rem;font-size:.8rem;}
+}
+</style>
+</head>
+<body>
+
+<!-- Sky layers -->
+<canvas id="skyCanvas"></canvas>
+<canvas id="cloudCanvas"></canvas>
+<canvas id="partCanvas"></canvas>
+<div id="atmOverlay"></div>
+<canvas id="lCanvas"></canvas>
+<div id="flashDiv"></div>
+<div id="grain"></div>
+<div id="vignette"></div>
+
+<div class="app">
+  <header class="hdr">
+    <div class="logo-wrap">
+      <svg class="logo-svg" viewBox="0 0 48 48" fill="none">
+        <defs>
+          <radialGradient id="sg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#fde68a"/><stop offset="100%" stop-color="#f59e0b"/></radialGradient>
+          <linearGradient id="cg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#e0f2fe"/><stop offset="100%" stop-color="#7dd3fc"/></linearGradient>
+          <linearGradient id="rg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#60a5fa"/><stop offset="100%" stop-color="#3b82f6" stop-opacity="0"/></linearGradient>
+        </defs>
+        <circle cx="20" cy="16" r="8" fill="url(#sg)" opacity=".95"/>
+        <g stroke="#fcd34d" stroke-width="1.8" stroke-linecap="round" opacity=".8">
+          <line x1="20" y1="4" x2="20" y2="2"/><line x1="28" y1="8" x2="29.5" y2="6.5"/>
+          <line x1="32" y1="16" x2="34" y2="16"/><line x1="12" y1="8" x2="10.5" y2="6.5"/>
+          <line x1="8" y1="16" x2="6" y2="16"/>
+        </g>
+        <path d="M10 34 Q10 28 16 28 Q17 24 22 24 Q28 24 28 30 Q32 30 32 34 Q32 38 28 38 H14 Q10 38 10 34Z" fill="url(#cg)" opacity=".92"/>
+        <line x1="16" y1="40" x2="14" y2="45" stroke="url(#rg)" stroke-width="2" stroke-linecap="round"/>
+        <line x1="22" y1="41" x2="20" y2="46" stroke="url(#rg)" stroke-width="2" stroke-linecap="round"/>
+        <line x1="28" y1="40" x2="26" y2="45" stroke="url(#rg)" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      <span class="logo-name">R-Weathers</span>
+      <span class="logo-badge">v3.0</span>
+    </div>
+    <div class="logo-sub">Atmospheric Intelligence · Real‑Time</div>
+  </header>
+
+  <div class="search-area">
+    <div class="s-row">
+      <div class="s-shell">
+        <svg class="s-ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg>
+        <input id="cityInput" type="text" placeholder="City name, country…" autocomplete="off" spellcheck="false"/>
+      </div>
+      <button class="btn btn-go" id="searchBtn">Search</button>
+      <button class="btn btn-loc" id="geoBtn">📍 Locate</button>
+    </div>
+    <div class="chips">
+      <span class="chip" data-city="London">🇬🇧 London</span>
+      <span class="chip" data-city="Tokyo">🇯🇵 Tokyo</span>
+      <span class="chip" data-city="New York">🇺🇸 NYC</span>
+      <span class="chip" data-city="Dubai">🇦🇪 Dubai</span>
+      <span class="chip" data-city="Mumbai">🇮🇳 Mumbai</span>
+      <span class="chip" data-city="Sydney">🇦🇺 Sydney</span>
+      <span class="chip" data-city="Paris">🇫🇷 Paris</span>
+    </div>
+  </div>
+
+  <div class="unit-row">
+    <button class="u-btn on" id="btnC">°C</button>
+    <button class="u-btn" id="btnF">°F</button>
+    <button class="u-btn" id="btnK">K</button>
+  </div>
+
+  <div class="last-chip" id="lastChip">
+    <div class="lc-dot"></div>
+    <span>Last: </span><strong id="lcName">—</strong>
+    <span style="opacity:.35;font-size:.63rem;margin-left:.15rem">· reload</span>
+  </div>
+
+  <div class="spin-box" id="spinBox">
+    <div class="spin-ring"></div>
+    <div class="spin-txt">Reading the atmosphere…</div>
+  </div>
+
+  <div class="err-box" id="errBox">
+    <div class="err-ico">⚠️</div>
+    <div class="err-msg"><div class="err-title" id="errTitle">Error</div><div id="errText">Something went wrong.</div></div>
+  </div>
+
+  <div class="alert-bar" id="alertBar">
+    <div class="alert-ico">🚨</div>
+    <div class="alert-txt"><div class="alert-head">Weather Advisory</div><div id="alertMsg">Extreme conditions detected.</div></div>
+  </div>
+
+  <div class="w-card" id="wCard">
+    <div class="c-head">
+      <div class="c-loc">
+        <div class="c-city" id="wcCity">—</div>
+        <div class="c-meta">
+          <span>🌍 <span id="wcCountry">—</span></span>
+          <span>🕐 <span id="wcTime">—</span></span>
+          <span>📅 <span id="wcDate">—</span></span>
+        </div>
+      </div>
+      <div id="lottieWrap"></div>
+    </div>
+    <div class="t-row">
+      <div class="t-main"><span id="wcTemp">—</span><span class="t-sup" id="wcUnit">°C</span></div>
+      <div class="t-side">
+        <div class="t-feels">Feels like <strong id="wcFeels">—</strong></div>
+        <div class="t-range"><span class="t-hi">↑<span id="wcMax">—</span></span><span class="t-lo">↓<span id="wcMin">—</span></span></div>
+        <div class="t-desc" id="wcDesc">—</div>
+      </div>
+    </div>
+    <div class="cond-p"><div class="cond-led"></div><span id="wcCond">—</span></div>
+    <div class="stats-g">
+      <div class="st"><div class="st-i">💧</div><div class="st-l">Humidity</div><div class="st-v" id="wcHum">—</div></div>
+      <div class="st"><div class="st-i">👁️</div><div class="st-l">Visibility</div><div class="st-v" id="wcVis">—</div></div>
+      <div class="st"><div class="st-i">📊</div><div class="st-l">Pressure</div><div class="st-v" id="wcPres">—</div></div>
+      <div class="st"><div class="st-i">☁️</div><div class="st-l">Cloud Cover</div><div class="st-v" id="wcCloud">—</div></div>
+      <div class="st"><div class="st-i">🌅</div><div class="st-l">Sunrise</div><div class="st-v" id="wcRise">—</div></div>
+      <div class="st"><div class="st-i">🌇</div><div class="st-l">Sunset</div><div class="st-v" id="wcSet">—</div></div>
+    </div>
+    <div class="uv-wrap">
+      <div class="sec-label">UV Index</div>
+      <div class="uv-track"><div class="uv-knob" id="uvKnob" style="left:0%"></div></div>
+      <div class="uv-info" id="uvInfo">UV —</div>
+    </div>
+    <div class="solar-wrap">
+      <div class="sec-label">Solar Arc</div>
+      <svg class="solar-svg" viewBox="0 0 300 95" fill="none">
+        <path d="M15 88 Q150 -15 285 88" stroke="rgba(255,255,255,0.08)" stroke-width="1.8" fill="none"/>
+        <path id="arcPath" d="M15 88 Q150 -15 285 88" stroke="url(#arcLG)" stroke-width="2.5" fill="none" stroke-dasharray="345" stroke-dashoffset="345"/>
+        <defs><linearGradient id="arcLG" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#fb923c"/><stop offset="100%" stop-color="#fbbf24"/></linearGradient></defs>
+        <circle id="solDot" cx="15" cy="88" r="5.5" fill="#fbbf24"><animate attributeName="r" values="5.5;7;5.5" dur="2.2s" repeatCount="indefinite"/></circle>
+        <circle cx="15" cy="88" r="9" fill="rgba(251,191,36,0.2)"><animate attributeName="r" values="9;14;9" dur="2.2s" repeatCount="indefinite"/><animate attributeName="opacity" values="0.4;0;0.4" dur="2.2s" repeatCount="indefinite"/></circle>
+        <line x1="5" y1="88" x2="295" y2="88" stroke="rgba(255,255,255,0.1)" stroke-width="1" stroke-dasharray="5,5"/>
+      </svg>
+      <div class="solar-times">
+        <div class="sol-item"><div class="sol-lbl">🌅 Sunrise</div><div class="sol-val" id="solRise">—</div></div>
+        <div class="sol-item"><div class="sol-lbl">⏱ Day Length</div><div class="sol-val" id="solLen">—</div></div>
+        <div class="sol-item"><div class="sol-lbl">🌇 Sunset</div><div class="sol-val" id="solSet">—</div></div>
+      </div>
+    </div>
+    <div class="hourly-wrap">
+      <div class="sec-label">Hourly · Next 24h</div>
+      <div class="h-scroll" id="hScroll"></div>
+    </div>
+    <div class="wind-wrap">
+      <div class="cmps">
+        <div class="cmps-ring">
+          <span class="cmps-d n">N</span><span class="cmps-d s">S</span>
+          <span class="cmps-d e">E</span><span class="cmps-d w">W</span>
+          <div class="needle-n" id="needleN"></div>
+          <div class="needle-s" id="needleS"></div>
+          <div class="cmps-ctr"></div>
+        </div>
+      </div>
+      <div class="wind-info">
+        <div class="sec-label">Wind</div>
+        <div class="wi-speed" id="wiSpd">— <span class="wi-unit">km/h</span></div>
+        <div class="wi-dir" id="wiDir">Direction: —</div>
+        <div class="wi-gust" id="wiGust"></div>
+        <div class="wi-bft" id="wiBft"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="fc-card" id="fcCard">
+    <div class="sec-label">5‑Day Forecast</div>
+    <div class="fc-row" id="fcRow"></div>
+  </div>
+
+  <div class="mini-row" id="miniRow">
+    <div class="mc">
+      <div class="mc-title">💧 Humidity</div>
+      <div class="hring-wrap">
+        <svg class="hring-svg" viewBox="0 0 62 62">
+          <circle class="hring-bg" cx="31" cy="31" r="26"/>
+          <circle class="hring-fg" id="hringFg" cx="31" cy="31" r="26" stroke-dasharray="163.4" stroke-dashoffset="163.4"/>
+        </svg>
+        <div><div class="hring-val" id="hringVal">—</div><div class="hring-lbl" id="hringLbl">—</div></div>
+      </div>
+    </div>
+    <div class="mc">
+      <div class="mc-title">🌡️ Heat Index</div>
+      <div class="mc-big" id="hiVal">—</div><div class="mc-sub" id="hiDesc">—</div>
+    </div>
+    <div class="mc">
+      <div class="mc-title">🌧️ Precipitation</div>
+      <div class="mc-big" id="precipVal">0 mm</div><div class="mc-sub" id="precipDesc">Last hour</div>
+    </div>
+    <div class="mc">
+      <div class="mc-title">📡 Coordinates</div>
+      <div style="font-family:'Share Tech Mono',monospace;font-size:.82rem;line-height:2">
+        <div>LAT <span id="cLat" style="color:var(--accent)">—</span></div>
+        <div>LON <span id="cLon" style="color:var(--accent)">—</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="map-card" id="mapCard">
+    <div class="sec-label">📍 Location</div>
+    <div class="map-box">
+      <div class="map-grid"></div>
+      <div class="map-empty" id="mapEmpty"><span style="font-size:1.6rem">🌍</span><span>Search a city to see location</span></div>
+      <div class="map-pin" id="mapPin"></div>
+    </div>
+    <div class="map-meta" id="mapMeta"></div>
+  </div>
+
+  <div class="act-row" id="actRow">
+    <button class="act-btn" id="shareBtn">🔗 Share</button>
+    <button class="act-btn" id="refreshBtn">🔄 Refresh</button>
+    <button class="act-btn" id="printBtn">🖨️ Save</button>
+  </div>
+
+  <footer class="footer">R-WEATHERS v3.0 · OPENWEATHERMAP · <span id="ftTime"></span></footer>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   R-WEATHERS v3.0 — PHOTOREALISTIC SKY ENGINE
+   Uses layered canvas with Rayleigh scattering simulation,
+   volumetric cloud rendering, and cinematic colour science.
+═══════════════════════════════════════════════════════════════ */
+const API_KEY='8846ef96d37d7bca336e1508872fd644';
+const OW='https://api.openweathermap.org/data/2.5';
+
+let unit='C',cache=null,lastCity='',lottieAnim=null,thunderClock=null;
+
+const LOTTIES={Clear:'https://assets9.lottiefiles.com/packages/lf20_xlmz9xwm.json',Clouds:'https://assets2.lottiefiles.com/packages/lf20_vfttolbo.json',Rain:'https://assets5.lottiefiles.com/packages/lf20_uoezl6n3.json',Drizzle:'https://assets5.lottiefiles.com/packages/lf20_uoezl6n3.json',Thunderstorm:'https://assets3.lottiefiles.com/packages/lf20_1uehzv.json',Snow:'https://assets3.lottiefiles.com/packages/lf20_iatjzhno.json',Mist:'https://assets2.lottiefiles.com/packages/lf20_vfttolbo.json',Fog:'https://assets2.lottiefiles.com/packages/lf20_vfttolbo.json',Haze:'https://assets2.lottiefiles.com/packages/lf20_vfttolbo.json'};
+const FC_ICO={Clear:'☀️',Clouds:'☁️',Rain:'🌧️',Drizzle:'🌦️',Thunderstorm:'⛈️',Snow:'❄️',Mist:'🌫️',Fog:'🌫️',Haze:'🌫️'};
+const WDIRS=['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+const BFT=[[0.5,'Calm'],[1.5,'Light Air'],[3.3,'Light Breeze'],[5.5,'Gentle Breeze'],[7.9,'Moderate Breeze'],[10.7,'Fresh Breeze'],[13.8,'Strong Breeze'],[17.1,'Near Gale'],[20.7,'Gale'],[24.4,'Strong Gale'],[28.4,'Storm'],[32.6,'Violent Storm'],[Infinity,'Hurricane']];
+const UV_LBL=['Low','Low','Moderate','Moderate','Moderate','High','High','Very High','Very High','Very High','Extreme','Extreme'];
+const HUM_D=v=>v<30?'Very Dry':v<50?'Comfortable':v<70?'Moderate':v<85?'Humid':'Very Humid';
+const $=id=>document.getElementById(id);
+
+/* ═══════════════════════════════════════════════
+   THREE CANVAS SKY ENGINE
+═══════════════════════════════════════════════ */
+const skyC=$('skyCanvas'),skyX=skyC.getContext('2d');
+const cldC=$('cloudCanvas'),cldX=cldC.getContext('2d');
+const ptC=$('partCanvas'),ptX=ptC.getContext('2d');
+const ltC=$('lCanvas'),ltX=ltC.getContext('2d');
+
+let W=0,H=0,T=0,skyMode='default',parts=[],clouds=[];
+
+function resize(){
+  W=window.innerWidth;H=window.innerHeight;
+  [skyC,cldC,ptC,ltC].forEach(c=>{c.width=W;c.height=H;});
+}
+resize();window.addEventListener('resize',()=>{resize();buildClouds();});
+
+/* ── Perlin-like noise (simple) ─────────────────────────────── */
+const PERM=(()=>{const a=[];for(let i=0;i<256;i++)a[i]=i;for(let i=255;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return [...a,...a];})();
+function fade(t){return t*t*t*(t*(t*6-15)+10);}
+function lerp(a,b,t){return a+t*(b-a);}
+function grad(h,x,y){const v=h&3;return(v<2?x:-x)+(v===1||v===2?y:-y);}
+function noise(x,y){
+  const xi=Math.floor(x)&255,yi=Math.floor(y)&255;
+  const xf=x-Math.floor(x),yf=y-Math.floor(y);
+  const u=fade(xf),v=fade(yf);
+  const aa=PERM[PERM[xi]+yi],ab=PERM[PERM[xi]+yi+1];
+  const ba=PERM[PERM[xi+1]+yi],bb=PERM[PERM[xi+1]+yi+1];
+  return lerp(lerp(grad(aa,xf,yf),grad(ba,xf-1,yf),u),lerp(grad(ab,xf,yf-1),grad(bb,xf-1,yf-1),u),v);
+}
+function fbm(x,y,oct=5){
+  let v=0,a=0.5,f=1;
+  for(let i=0;i<oct;i++){v+=noise(x*f,y*f)*a;f*=2;a*=0.5;}
+  return v;
+}
+
+/* ═══════════════════════════════════════════════
+   PHOTOREALISTIC SKY RENDERING
+   Simulates Rayleigh + Mie scattering colour science
+═══════════════════════════════════════════════ */
+
+// Sky colour palettes: [zenith, mid, horizon, ground]
+const PALETTES={
+  clear_day:{
+    zenith:   [8,  20, 80],
+    midA:     [30, 80, 180],
+    midB:     [80, 150, 220],
+    horizon:  [170,210,240],
+    sunGlow:  [255,200,120],
+    sunDisk:  [255,255,200],
+    groundFog:[200,220,240],
+  },
+  clear_golden:{ // sunrise/sunset
+    zenith:   [15, 10, 50],
+    midA:     [80, 30, 80],
+    midB:     [200,80, 40],
+    horizon:  [255,160,60],
+    sunGlow:  [255,120,20],
+    sunDisk:  [255,220,100],
+    groundFog:[255,180,100],
+  },
+  clear_night:{
+    zenith:   [1,  2,  8],
+    midA:     [3,  6,  18],
+    midB:     [6,  12, 28],
+    horizon:  [10, 18, 40],
+    sunGlow:  [40, 60, 120],
+    sunDisk:  [220,235,255],
+    groundFog:[20, 30, 55],
+  },
+  clouds_light:{
+    zenith:   [40, 55, 75],
+    midA:     [80, 105,130],
+    midB:     [130,155,175],
+    horizon:  [180,200,215],
+    sunGlow:  [220,220,220],
+    sunDisk:  [240,240,240],
+    groundFog:[200,210,220],
+  },
+  clouds_heavy:{
+    zenith:   [20, 28, 38],
+    midA:     [40, 52, 65],
+    midB:     [65, 78, 90],
+    horizon:  [100,112,122],
+    sunGlow:  [140,148,155],
+    sunDisk:  [160,168,175],
+    groundFog:[120,130,138],
+  },
+  rain:{
+    zenith:   [10, 14, 22],
+    midA:     [18, 26, 38],
+    midB:     [30, 42, 56],
+    horizon:  [55, 70, 85],
+    sunGlow:  [80, 90, 100],
+    sunDisk:  [100,110,120],
+    groundFog:[70, 80, 92],
+  },
+  storm:{
+    zenith:   [4,  5,  10],
+    midA:     [8,  10, 18],
+    midB:     [15, 18, 28],
+    horizon:  [30, 35, 50],
+    sunGlow:  [60, 55, 80],
+    sunDisk:  [80, 75, 100],
+    groundFog:[40, 42, 58],
+  },
+  snow:{
+    zenith:   [25, 38, 65],
+    midA:     [60, 85, 120],
+    midB:     [120,148,185],
+    horizon:  [190,210,230],
+    sunGlow:  [220,228,240],
+    sunDisk:  [245,248,255],
+    groundFog:[210,225,240],
+  },
+  mist:{
+    zenith:   [30, 42, 55],
+    midA:     [65, 85, 105],
+    midB:     [110,135,155],
+    horizon:  [170,192,208],
+    sunGlow:  [200,215,225],
+    sunDisk:  [220,232,240],
+    groundFog:[185,200,215],
+  },
+};
+
+let currentPalette=PALETTES.clear_day;
+let targetPalette=PALETTES.clear_day;
+let paletteLerp=1.0; // 0→1 transition
+
+function lerpPalette(a,b,t){
+  const r={};
+  for(const k in a){r[k]=a[k].map((v,i)=>Math.round(lerp(v,b[k][i],t)));}
+  return r;
+}
+
+function rgbStr(arr,alpha=1){return `rgba(${arr[0]},${arr[1]},${arr[2]},${alpha})`;}
+
+/* ── Draw the photorealistic sky ──────────────────────────── */
+function drawPhotoSky(pal,t){
+  const ctx=skyX;
+  ctx.clearRect(0,0,W,H);
+
+  // 1. Multi-stop vertical gradient (atmosphere)
+  const atm=ctx.createLinearGradient(0,0,0,H);
+  atm.addColorStop(0,   rgbStr(pal.zenith));
+  atm.addColorStop(0.3, rgbStr(pal.midA));
+  atm.addColorStop(0.6, rgbStr(pal.midB));
+  atm.addColorStop(0.85,rgbStr(pal.horizon));
+  atm.addColorStop(1,   rgbStr(pal.groundFog));
+  ctx.fillStyle=atm;ctx.fillRect(0,0,W,H);
+
+  // 2. Subtle Rayleigh colour shift — slight blue tint at top
+  const ray=ctx.createLinearGradient(0,0,0,H*0.4);
+  ray.addColorStop(0,'rgba(20,40,120,0.12)');
+  ray.addColorStop(1,'transparent');
+  ctx.fillStyle=ray;ctx.fillRect(0,0,W,H*0.4);
+
+  // 3. Horizon atmospheric glow (scattering)
+  const hGlow=ctx.createRadialGradient(W/2,H*0.78,0,W/2,H*0.78,W*0.9);
+  hGlow.addColorStop(0,rgbStr(pal.sunGlow,0.22));
+  hGlow.addColorStop(0.35,rgbStr(pal.sunGlow,0.07));
+  hGlow.addColorStop(1,'transparent');
+  ctx.fillStyle=hGlow;ctx.fillRect(0,0,W,H);
+
+  // 4. Side ambient scattering (realistic sky has colour shift left/right)
+  const sideL=ctx.createLinearGradient(0,0,W*0.25,0);
+  sideL.addColorStop(0,`rgba(${pal.midB[0]},${pal.midB[1]},${pal.midB[2]},0.08)`);
+  sideL.addColorStop(1,'transparent');
+  ctx.fillStyle=sideL;ctx.fillRect(0,0,W,H);
+}
+
+/* ── Sun rendering (multi-layer) ──────────────────────────── */
+let sunX=0,sunY=0,sunVis=false;
+function drawSun(pal,t,isNight){
+  if(isNight) return;
+  const ctx=skyX;
+  const pulse=1+0.04*Math.sin(t*0.9);
+
+  // outer corona (very large, soft)
+  const corona=ctx.createRadialGradient(sunX,sunY,0,sunX,sunY,220*pulse);
+  corona.addColorStop(0,rgbStr(pal.sunGlow,0.12));
+  corona.addColorStop(0.3,rgbStr(pal.sunGlow,0.05));
+  corona.addColorStop(1,'transparent');
+  ctx.fillStyle=corona;ctx.beginPath();ctx.arc(sunX,sunY,220*pulse,0,Math.PI*2);ctx.fill();
+
+  // mid glow
+  const midG=ctx.createRadialGradient(sunX,sunY,0,sunX,sunY,80*pulse);
+  midG.addColorStop(0,rgbStr(pal.sunGlow,0.45));
+  midG.addColorStop(0.5,rgbStr(pal.sunGlow,0.18));
+  midG.addColorStop(1,'transparent');
+  ctx.fillStyle=midG;ctx.beginPath();ctx.arc(sunX,sunY,80*pulse,0,Math.PI*2);ctx.fill();
+
+  // solar disk with limb darkening
+  const disk=ctx.createRadialGradient(sunX-4,sunY-4,0,sunX,sunY,26);
+  disk.addColorStop(0,rgbStr(pal.sunDisk));
+  disk.addColorStop(0.6,`rgba(${pal.sunDisk[0]-10},${pal.sunDisk[1]-20},${pal.sunDisk[2]-40},1)`);
+  disk.addColorStop(1,`rgba(${pal.sunGlow[0]},${pal.sunGlow[1]},${pal.sunGlow[2]},0.85)`);
+  ctx.fillStyle=disk;ctx.beginPath();ctx.arc(sunX,sunY,26,0,Math.PI*2);ctx.fill();
+
+  // atmospheric lens flare streak (horizontal)
+  const lf=ctx.createLinearGradient(sunX-W*0.4,sunY,sunX+W*0.4,sunY);
+  lf.addColorStop(0,'transparent');
+  lf.addColorStop(0.45,rgbStr(pal.sunGlow,0.04));
+  lf.addColorStop(0.5,rgbStr(pal.sunDisk,0.12));
+  lf.addColorStop(0.55,rgbStr(pal.sunGlow,0.04));
+  lf.addColorStop(1,'transparent');
+  ctx.fillStyle=lf;ctx.fillRect(0,sunY-1.5,W,3);
+
+  // rotating rays
+  for(let i=0;i<20;i++){
+    const angle=(i/20)*Math.PI*2+t*0.12;
+    const len=i%2===0?90:60;
+    const op=i%2===0?0.18:0.1;
+    ctx.save();ctx.translate(sunX,sunY);ctx.rotate(angle);
+    const rg=ctx.createLinearGradient(28,0,28+len,0);
+    rg.addColorStop(0,rgbStr(pal.sunGlow,op));rg.addColorStop(1,'transparent');
+    ctx.fillStyle=rg;ctx.fillRect(28,-0.8,len,1.6);ctx.restore();
+  }
+}
+
+/* ── Moon rendering ───────────────────────────────────────── */
+function drawMoon(pal,t){
+  const ctx=skyX;
+  const mx=W*0.75,my=H*0.15;
+  const pulse=1+0.025*Math.sin(t*0.7);
+
+  // Moon glow
+  const mg=ctx.createRadialGradient(mx,my,0,mx,my,100*pulse);
+  mg.addColorStop(0,`rgba(${pal.sunGlow[0]},${pal.sunGlow[1]},${pal.sunGlow[2]},0.1)`);
+  mg.addColorStop(1,'transparent');
+  ctx.fillStyle=mg;ctx.beginPath();ctx.arc(mx,my,100*pulse,0,Math.PI*2);ctx.fill();
+
+  // Moon disk
+  const md=ctx.createRadialGradient(mx-5,my-4,0,mx,my,22);
+  md.addColorStop(0,'#f0f4ff');md.addColorStop(0.6,'#c8d4f0');md.addColorStop(1,'#8890b0');
+  ctx.fillStyle=md;ctx.beginPath();ctx.arc(mx,my,22,0,Math.PI*2);ctx.fill();
+
+  // Crescent
+  ctx.fillStyle=`rgba(${pal.zenith[0]},${pal.zenith[1]},${pal.zenith[2]},0.82)`;
+  ctx.beginPath();ctx.arc(mx+8,my-1,20,0,Math.PI*2);ctx.fill();
+
+  // Craters
+  [[mx-6,my+5,2.5,'rgba(160,175,210,0.35)'],[mx+3,my-8,1.8,'rgba(140,155,195,0.3)'],[mx-9,my-2,1.5,'rgba(150,165,200,0.25)']].forEach(([cx,cy,cr,fill])=>{
+    ctx.beginPath();ctx.arc(cx,cy,cr,0,Math.PI*2);ctx.fillStyle=fill;ctx.fill();
+  });
+}
+
+/* ── Realistic stars ──────────────────────────────────────── */
+let stars=[];
+function genStars(){
+  stars=[];
+  for(let i=0;i<280;i++){
+    stars.push({
+      nx:Math.random(),ny:Math.random()*0.78,
+      r:Math.random()*1.3+0.15,
+      ph:Math.random()*Math.PI*2,
+      sp:Math.random()*0.015+0.004,
+      color:`rgba(${200+Math.floor(Math.random()*55)},${200+Math.floor(Math.random()*55)},${220+Math.floor(Math.random()*35)},`,
+      bright:Math.random()>0.95,
+    });
+  }
+}
+genStars();
+function drawStars(t,alpha){
+  const ctx=skyX;
+  stars.forEach(s=>{
+    const op=alpha*(0.35+0.65*Math.abs(Math.sin(s.ph+t*s.sp)));
+    ctx.beginPath();
+    ctx.arc(s.nx*W,s.ny*H,s.r,0,Math.PI*2);
+    ctx.fillStyle=s.color+op+')';ctx.fill();
+    if(s.bright&&op>0.5){
+      ctx.strokeStyle=s.color+(op*0.3)+')';ctx.lineWidth=0.5;
+      ctx.beginPath();ctx.moveTo(s.nx*W-s.r*4,s.ny*H);ctx.lineTo(s.nx*W+s.r*4,s.ny*H);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(s.nx*W,s.ny*H-s.r*4);ctx.lineTo(s.nx*W,s.ny*H+s.r*4);ctx.stroke();
+    }
+  });
+}
+
+/* ── Milky way band (only on clear nights) ──────────────────── */
+function drawMilkyWay(alpha){
+  const ctx=skyX;
+  ctx.save();
+  ctx.globalAlpha=alpha*0.08;
+  const mw=ctx.createLinearGradient(0,H*0.1,W,H*0.6);
+  mw.addColorStop(0,'transparent');
+  mw.addColorStop(0.3,'rgba(180,170,220,1)');
+  mw.addColorStop(0.5,'rgba(220,210,255,1)');
+  mw.addColorStop(0.7,'rgba(180,170,220,1)');
+  mw.addColorStop(1,'transparent');
+  ctx.fillStyle=mw;
+  ctx.beginPath();
+  ctx.ellipse(W*0.5,H*0.35,W*0.55,H*0.12,Math.PI*0.3,0,Math.PI*2);
+  ctx.fill();
+  ctx.globalAlpha=1;
+  ctx.restore();
+}
+
+/* ═══════════════════════════════════════════════
+   VOLUMETRIC CLOUD RENDERING (cloud canvas)
+═══════════════════════════════════════════════ */
+const cloudTypes={
+  // Each cloud: [x,y,scale,speed,type,opacity]
+  clear:    {n:2,  yRange:[0.05,0.25],opRange:[0.04,0.09], scale:[0.5,0.9]},
+  partly:   {n:5,  yRange:[0.05,0.35],opRange:[0.08,0.16], scale:[0.7,1.2]},
+  cloudy:   {n:10, yRange:[0.05,0.55],opRange:[0.14,0.24], scale:[0.9,1.8]},
+  overcast: {n:16, yRange:[0.02,0.65],opRange:[0.18,0.32], scale:[1.2,2.5]},
+  storm:    {n:18, yRange:[0.02,0.7], opRange:[0.22,0.40], scale:[1.5,3.0]},
+};
+
+function buildClouds(type='partly'){
+  const cfg=cloudTypes[type]||cloudTypes.partly;
+  clouds=[];
+  for(let i=0;i<cfg.n;i++){
+    const sc=cfg.scale[0]+Math.random()*(cfg.scale[1]-cfg.scale[0]);
+    clouds.push({
+      x:Math.random()*1.6-0.3,
+      y:cfg.yRange[0]+Math.random()*(cfg.yRange[1]-cfg.yRange[0]),
+      sc,
+      sp:(Math.random()*0.00006+0.00002)*(Math.random()<.5?1:-0.6),
+      op:cfg.opRange[0]+Math.random()*(cfg.opRange[1]-cfg.opRange[0]),
+      seed:Math.random()*100,
+      bright:Math.random()>0.5,
+      color:[255,255,255], // overridden per palette
+    });
+  }
+}
+buildClouds();
+
+function drawVolumetricCloud(ctx,cx,cy,sc,op,seed,bright,pal,isStorm){
+  ctx.save();
+  ctx.translate(cx,cy);ctx.scale(sc,sc*0.52);
+
+  // Cloud base colour from palette
+  const cr=isStorm?pal.zenith:pal.horizon;
+  const cBase=`rgba(${cr[0]},${cr[1]},${cr[2]},`;
+  const cLight=`rgba(255,255,255,`;
+
+  // Multiple puff layers for volumetric look
+  const puffs=[
+    {dx:0,dy:0,r:70},{dx:65,dy:8,r:58},{dx:-60,dy:10,r:52},
+    {dx:35,dy:-28,r:48},{dx:-32,dy:-20,r:42},{dx:100,dy:2,r:44},
+    {dx:-95,dy:6,r:38},{dx:20,dy:25,r:30},{dx:-18,dy:28,r:26},
+    {dx:55,dy:-20,r:35},{dx:-45,dy:-14,r:32},
+  ];
+  puffs.forEach(p=>{
+    // Use fbm noise offset for organic shape
+    const nx=(cx/W+p.dx*0.001+seed)*0.8;
+    const ny=(cy/H+p.dy*0.001+seed)*0.8;
+    const nv=fbm(nx,ny,4)*0.5+0.5;
+    const r=p.r*(0.8+0.4*nv);
+    const g=ctx.createRadialGradient(p.dx,p.dy,0,p.dx,p.dy,r);
+    // Bright top, darker base (realistic cloud lighting)
+    if(bright&&!isStorm){
+      g.addColorStop(0,cLight+(op*0.9)+')');
+      g.addColorStop(0.4,cLight+(op*0.6)+')');
+      g.addColorStop(0.75,cBase+(op*0.35)+')');
+      g.addColorStop(1,'transparent');
+    } else {
+      g.addColorStop(0,cBase+(op*0.55)+')');
+      g.addColorStop(0.5,cBase+(op*0.32)+')');
+      g.addColorStop(1,'transparent');
+    }
+    ctx.fillStyle=g;ctx.beginPath();ctx.arc(p.dx,p.dy,r,0,Math.PI*2);ctx.fill();
+
+    // Dark underside (shadow)
+    if(!isStorm){
+      const sg=ctx.createRadialGradient(p.dx,p.dy+r*0.7,0,p.dx,p.dy+r*0.7,r*0.5);
+      sg.addColorStop(0,`rgba(${cr[0]*0.3},${cr[1]*0.3},${cr[2]*0.4},${op*0.2})`);
+      sg.addColorStop(1,'transparent');
+      ctx.fillStyle=sg;ctx.beginPath();ctx.arc(p.dx,p.dy+r*0.7,r*0.5,0,Math.PI*2);ctx.fill();
+    }
+  });
+  ctx.restore();
+}
+
+function renderClouds(pal,t){
+  cldX.clearRect(0,0,W,H);
+  const isStorm=skyMode==='storm'||skyMode==='rain';
+  clouds.forEach(c=>{
+    c.x+=c.sp;
+    if(c.x>1.5)c.x=-0.5;if(c.x<-0.5)c.x=1.5;
+    drawVolumetricCloud(cldX,c.x*W,c.y*H,c.sc,c.op,c.seed+T*0.001,c.bright,pal,isStorm);
+  });
+}
+
+/* ═══════════════════════════════════════════════
+   PARTICLES (Rain / Snow / Hail)
+═══════════════════════════════════════════════ */
+let partType='none';
+function initParts(type){
+  partType=type;parts=[];
+  const n=type==='rain'?250:type==='storm'?400:type==='snow'?140:type==='drizzle'?180:0;
+  for(let i=0;i<n;i++){
+    if(type==='rain'||type==='storm'||type==='drizzle'){
+      parts.push({
+        x:Math.random()*W,y:Math.random()*H,
+        len:type==='drizzle'?Math.random()*10+6:Math.random()*28+14,
+        spd:type==='drizzle'?Math.random()*7+5:Math.random()*18+14+(type==='storm'?10:0),
+        op:Math.random()*(type==='drizzle'?0.3:0.5)+0.15,
+        ang:type==='storm'?22:type==='drizzle'?5:9,
+        w:Math.random()*0.8+0.3,
+      });
+    }else if(type==='snow'){
+      parts.push({
+        x:Math.random()*W,y:Math.random()*H,
+        r:Math.random()*4+1.2,
+        spd:Math.random()*1.4+0.4,
+        drift:Math.random()*0.6-0.3,
+        op:Math.random()*0.7+0.3,
+        ph:Math.random()*Math.PI*2,
+      });
+    }
+  }
+}
+function drawParts(t){
+  ptX.clearRect(0,0,W,H);
+  if(partType==='none')return;
+  parts.forEach(p=>{
+    if(partType==='rain'||partType==='storm'||partType==='drizzle'){
+      p.y+=p.spd;p.x+=p.spd*Math.tan(p.ang*Math.PI/180);
+      if(p.y>H){p.y=-p.len;p.x=Math.random()*W;}
+      if(p.x>W)p.x=0;
+      const g=ptX.createLinearGradient(p.x,p.y,p.x+p.len*Math.sin(p.ang*Math.PI/180),p.y+p.len);
+      g.addColorStop(0,'transparent');
+      g.addColorStop(0.3,`rgba(170,210,255,${p.op})`);
+      g.addColorStop(1,`rgba(150,190,240,${p.op*0.25})`);
+      ptX.strokeStyle=g;ptX.lineWidth=p.w;
+      ptX.beginPath();ptX.moveTo(p.x,p.y);ptX.lineTo(p.x+p.len*Math.sin(p.ang*Math.PI/180),p.y+p.len);ptX.stroke();
+    }else if(partType==='snow'){
+      p.y+=p.spd;p.x+=p.drift+Math.sin(T*0.5+p.ph)*0.35;
+      if(p.y>H){p.y=-10;p.x=Math.random()*W;}
+      if(p.x>W)p.x=0;if(p.x<0)p.x=W;
+      const sg=ptX.createRadialGradient(p.x,p.y,0,p.x,p.y,p.r*2.5);
+      sg.addColorStop(0,`rgba(230,240,255,${p.op})`);
+      sg.addColorStop(0.6,`rgba(210,225,255,${p.op*0.4})`);
+      sg.addColorStop(1,'transparent');
+      ptX.fillStyle=sg;ptX.beginPath();ptX.arc(p.x,p.y,p.r,0,Math.PI*2);ptX.fill();
+    }
+  });
+}
+
+/* ═══════════════════════════════════════════════
+   LIGHTNING (on dedicated canvas)
+═══════════════════════════════════════════════ */
+function drawBolt(){
+  ltX.clearRect(0,0,W,H);
+  const sx=W*(0.2+Math.random()*0.6),sy=0;
+  let cx=sx,cy=sy;
+  const segs=[];
+  while(cy<H*0.75){
+    const nx=cx+Math.random()*100-50;
+    const ny=cy+Math.random()*70+30;
+    segs.push([cx,cy,nx,ny]);cx=nx;cy=ny;
+  }
+  // Draw glow pass
+  ltX.strokeStyle='rgba(180,200,255,0.18)';ltX.lineWidth=8;
+  ltX.beginPath();ltX.moveTo(sx,0);
+  segs.forEach(([,, nx,ny])=>ltX.lineTo(nx,ny));ltX.stroke();
+  // Draw core
+  ltX.strokeStyle='rgba(220,235,255,0.95)';ltX.lineWidth=1.8;ltX.shadowColor='rgba(180,210,255,0.8)';ltX.shadowBlur=15;
+  ltX.beginPath();ltX.moveTo(sx,0);
+  segs.forEach(([,, nx,ny])=>ltX.lineTo(nx,ny));ltX.stroke();
+  ltX.shadowBlur=0;
+  // Branches
+  segs.forEach(([ox,oy,nx,ny],i)=>{
+    if(i%3===0&&Math.random()>0.5){
+      const bx=ox+(Math.random()*60-30);
+      const by=oy+Math.random()*60+20;
+      ltX.strokeStyle='rgba(200,220,255,0.5)';ltX.lineWidth=0.9;
+      ltX.beginPath();ltX.moveTo(ox,oy);ltX.lineTo(bx,by);ltX.stroke();
+    }
+  });
+  setTimeout(()=>ltX.clearRect(0,0,W,H),180);
+}
+
+/* ═══════════════════════════════════════════════
+   ATMOSPHERIC OVERLAY (fog/mist)
+═══════════════════════════════════════════════ */
+function setAtmOverlay(type,pal){
+  const el=$('atmOverlay');
+  if(type==='mist'||type==='fog'){
+    el.style.background=`
+      radial-gradient(ellipse 130% 50% at 50% 100%,rgba(${pal.groundFog.join(',')},0.35) 0%,transparent 65%),
+      radial-gradient(ellipse 90% 35% at 25% 95%,rgba(${pal.groundFog.join(',')},0.22) 0%,transparent 55%),
+      radial-gradient(ellipse 80% 30% at 75% 92%,rgba(${pal.groundFog.join(',')},0.18) 0%,transparent 50%)
+    `;
+    el.classList.add('on');
+  }else{
+    el.classList.remove('on');
+  }
+}
+
+/* ═══════════════════════════════════════════════
+   SKY MODE SETTER
+═══════════════════════════════════════════════ */
+function setSky(cond,isNight,sunFrac){
+  const c=cond.toLowerCase();
+  let mode,cloudType,palKey,particleT='none';
+
+  // Determine sky mode
+  if(c==='clear'){
+    mode=isNight?'clear_night':'clear_day';
+    cloudType='clear';
+    palKey=isNight?'clear_night':sunFrac<0.15||sunFrac>0.85?'clear_golden':'clear_day';
+    sunVis=!isNight;
+  } else if(c==='clouds'||c==='few clouds'||c==='scattered clouds'){
+    mode='clouds_light';cloudType='partly';palKey='clouds_light';sunVis=!isNight&&Math.random()>0.5;
+  } else if(c==='broken clouds'||c==='overcast clouds'){
+    mode='clouds_heavy';cloudType='cloudy';palKey='clouds_heavy';sunVis=false;
+  } else if(c==='drizzle'){
+    mode='rain';cloudType='overcast';palKey='rain';particleT='drizzle';sunVis=false;
+  } else if(c==='rain'){
+    mode='rain';cloudType='overcast';palKey='rain';particleT='rain';sunVis=false;
+  } else if(c==='thunderstorm'){
+    mode='storm';cloudType='storm';palKey='storm';particleT='storm';sunVis=false;
+  } else if(c==='snow'){
+    mode='snow';cloudType='cloudy';palKey='snow';particleT='snow';sunVis=false;
+  } else if(['mist','fog','haze','smoke','dust'].includes(c)){
+    mode='mist';cloudType='overcast';palKey='mist';sunVis=false;
+  } else {
+    mode='default';cloudType='partly';palKey=isNight?'clear_night':'clear_day';sunVis=!isNight;
+  }
+
+  skyMode=mode;
+  targetPalette=PALETTES[palKey]||PALETTES.clear_day;
+  paletteLerp=0; // start transition
+
+  buildClouds(cloudType);
+  initParts(particleT);
+
+  // Set sun position (arc based on time of day)
+  if(!isNight){
+    sunX=W*(0.15+sunFrac*0.7); // moves left to right
+    sunY=H*(0.5-0.38*Math.sin(Math.PI*sunFrac)); // arc up
+  }
+
+  // Atmospheric overlay
+  setAtmOverlay(c,targetPalette);
+
+  // Thunder
+  if(thunderClock) clearInterval(thunderClock);
+  if(mode==='storm'){
+    thunderClock=setInterval(()=>{
+      if(Math.random()>.45){
+        drawBolt();
+        const fl=$('flashDiv');fl.classList.remove('do-flash');void fl.offsetWidth;fl.classList.add('do-flash');
+      }
+    },2800);
+  }
+}
+
+/* ═══════════════════════════════════════════════
+   MAIN RENDER LOOP
+═══════════════════════════════════════════════ */
+function frame(){
+  T+=0.016;
+  // Interpolate palette
+  if(paletteLerp<1) paletteLerp=Math.min(paletteLerp+0.008,1);
+  const pal=lerpPalette(currentPalette,targetPalette,paletteLerp);
+  if(paletteLerp>=1) currentPalette=targetPalette;
+
+  const isNight=(skyMode==='clear_night'||skyMode==='default'&&true);
+  const nightMode=skyMode==='clear_night';
+  const showStars=nightMode||skyMode==='default';
+  const starAlpha=nightMode?1:skyMode==='default'?0.8:0;
+
+  // Draw sky
+  drawPhotoSky(pal,T);
+  if(showStars){drawStars(T,starAlpha);}
+  if(nightMode){drawMilkyWay(1);}
+  if(skyMode==='clear_day'||skyMode==='clouds_light'){drawSun(pal,T,false);}
+  if(nightMode){drawMoon(pal,T);}
+
+  // Draw clouds
+  renderClouds(pal,T);
+
+  // Particles
+  drawParts(T);
+
+  requestAnimationFrame(frame);
+}
+frame();
+
+/* ═══════════════════════════════════════════════
+   LOTTIE
+═══════════════════════════════════════════════ */
+function setLottie(cond){
+  if(lottieAnim){lottieAnim.destroy();lottieAnim=null;}
+  const box=$('lottieWrap');box.innerHTML='';
+  lottieAnim=lottie.loadAnimation({container:box,renderer:'svg',loop:true,autoplay:true,path:LOTTIES[cond]||LOTTIES.Clouds});
+}
+
+/* ═══════════════════════════════════════════════
+   UNIT CONVERSION
+═══════════════════════════════════════════════ */
+const conv=c=>unit==='F'?((c*9/5)+32).toFixed(1):unit==='K'?(c+273.15).toFixed(1):Math.round(c);
+const uSfx=()=>unit==='K'?'K':`°${unit}`;
+const fmtT=(u,tz)=>{const d=new Date((u+tz)*1000);return String(d.getUTCHours()).padStart(2,'0')+':'+String(d.getUTCMinutes()).padStart(2,'0');};
+const fmtNow=tz=>{const d=new Date((Date.now()/1000+tz)*1000);return d.toUTCString().slice(17,22);};
+const deg2dir=d=>WDIRS[Math.round(d/22.5)%16];
+const bft=ms=>BFT.find(([l])=>ms<l);
+const hIdx=(t,h)=>{if(t<27)return null;return -8.784695+1.61139411*t+2.338549*h-0.14611605*t*h-0.01230809*t*t-0.01642482*h*h+0.00221173*t*t*h+0.00072546*t*h*h-0.00000358*t*t*h*h;};
+const dayN=s=>['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(s).getDay()];
+const dateF=s=>new Date(s).toLocaleDateString('en-US',{month:'short',day:'numeric'});
+
+/* ═══════════════════════════════════════════════
+   UI
+═══════════════════════════════════════════════ */
+function setLoad(on){$('spinBox').className=on?'spin-box on':'spin-box';$('searchBtn').disabled=$('geoBtn').disabled=on;}
+function showErr(t,m){$('errTitle').textContent=t;$('errText').textContent=m;$('errBox').classList.add('on');['wCard','fcCard','miniRow','mapCard'].forEach(id=>$(id).classList.remove('on'));$('actRow').classList.remove('on');}
+function hideErr(){$('errBox').classList.remove('on');}
+function renderUV(uv){$('uvKnob').style.left=`${Math.min(uv/12,1)*100}%`;$('uvInfo').textContent=`${uv.toFixed(1)} · ${UV_LBL[Math.min(Math.floor(uv),11)]}`;}
+function renderSolar(rise,set,tz){
+  const now=Date.now()/1000+tz,rt=rise+tz,st=set+tz,prog=Math.max(0,Math.min((now-rt)/(st-rt),1));
+  $('arcPath').style.strokeDashoffset=345*(1-prog);
+  const tv=prog,sx=15+2*tv*(1-tv)*(150-15)+tv*tv*(285-15),sy=88+2*tv*(1-tv)*(-15-88)+tv*tv*(88-88);
+  $('solDot').setAttribute('cx',sx.toFixed(1));$('solDot').setAttribute('cy',sy.toFixed(1));
+  $('solRise').textContent=fmtT(rise,tz);$('solSet').textContent=fmtT(set,tz);
+  const dl=st-rt;$('solLen').textContent=`${Math.floor(dl/3600)}h ${Math.floor((dl%3600)/60)}m`;
+  $('wcRise').textContent=fmtT(rise,tz);$('wcSet').textContent=fmtT(set,tz);
+}
+function renderWind(speed,deg,gust){
+  const kmh=(speed*3.6).toFixed(1);
+  $('wiSpd').innerHTML=`${kmh} <span class="wi-unit">km/h</span>`;
+  $('wiDir').textContent=`Direction: ${deg2dir(deg)} (${deg}°)`;
+  if(gust)$('wiGust').textContent=`Gusts up to ${(gust*3.6).toFixed(1)} km/h`;
+  $('wiBft').textContent=bft(speed)[1];
+  $('needleN').style.transform=`translateX(-50%) translateY(-100%) rotate(${deg}deg)`;
+  $('needleS').style.transform=`translateX(-50%) rotate(${deg}deg)`;
+}
+function renderHumRing(h){
+  const off=163.4*(1-h/100);$('hringFg').style.strokeDashoffset=off;
+  $('hringVal').textContent=`${h}%`;$('hringLbl').textContent=HUM_D(h);
+  $('hringVal').style.color=h>70?'#60a5fa':h<30?'#fb923c':'var(--accent)';
+}
+function renderHourly(list,tz){
+  const sc=$('hScroll');sc.innerHTML='';
+  list.slice(0,8).forEach((item,i)=>{
+    const d=new Date((item.dt+tz)*1000),h=d.getUTCHours(),ampm=h>=12?'PM':'AM',h12=h%12||12;
+    const pop=item.pop?Math.round(item.pop*100):0;
+    const el=document.createElement('div');el.className='h-item'+(i===0?' now':'');
+    el.innerHTML=`<div class="h-t">${i===0?'NOW':`${h12}${ampm}`}</div><div class="h-e">${FC_ICO[item.weather[0].main]||'🌤️'}</div><div class="h-v">${conv(item.main.temp)}${uSfx()}</div>${pop?`<div class="h-p">💧${pop}%</div>`:''}`;
+    sc.appendChild(el);
+  });
+}
+function renderForecast(list){
+  const days={};const today=new Date().toISOString().slice(0,10);
+  list.forEach(item=>{const date=item.dt_txt.slice(0,10);if(!days[date]||Math.abs(new Date(item.dt_txt).getUTCHours()-12)<Math.abs(new Date(days[date].dt_txt).getUTCHours()-12))days[date]=item;});
+  const fc=$('fcRow');fc.innerHTML='';
+  Object.values(days).slice(0,6).forEach(day=>{
+    const date=day.dt_txt.slice(0,10),isT=date===today,pop=day.pop?Math.round(day.pop*100):0;
+    const el=document.createElement('div');el.className='fc-day'+(isT?' tod':'');
+    el.innerHTML=`<div class="fc-dn">${isT?'Today':dayN(date)}</div><div class="fc-dd">${dateF(date)}</div><div class="fc-ico">${FC_ICO[day.weather[0].main]||'🌤️'}</div><div class="fc-t"><span class="fc-hi">${conv(day.main.temp_max)}°</span><span class="fc-lo">${conv(day.main.temp_min)}°</span></div><div class="fc-ds">${day.weather[0].description}</div>${pop?`<div class="fc-pop">💧${pop}%</div>`:''}`;
+    fc.appendChild(el);
+  });
+}
+function renderMap(lat,lon,city,country){
+  const px=((lon+180)/360)*100,py=((90-lat)/180)*100;
+  const pin=$('mapPin');pin.style.left=`${px}%`;pin.style.top=`${py}%`;pin.style.display='block';
+  $('mapEmpty').style.display='none';
+  $('mapMeta').innerHTML=`<span>📍 ${city}, ${country}</span><span>${lat.toFixed(4)}°N · ${lon.toFixed(4)}°E</span>`;
+  $('cLat').textContent=lat.toFixed(4)+'°';$('cLon').textContent=lon.toFixed(4)+'°';
+}
+function checkAlerts(cond,temp,wind){
+  const c=cond.toLowerCase();let msg='';
+  if(c==='thunderstorm')msg='⛈️ Thunderstorm warning — seek shelter indoors.';
+  else if(temp>40)msg='🌡️ Extreme heat — stay hydrated, avoid direct sun.';
+  else if(temp<-10)msg='🥶 Severe cold — risk of frostbite. Dress warmly.';
+  else if(wind>25)msg='💨 Strong wind advisory — secure loose objects.';
+  $('alertBar').classList.toggle('on',!!msg);
+  if(msg)$('alertMsg').textContent=msg;
+}
+
+/* ═══════════════════════════════════════════════
+   MAIN RENDER
+═══════════════════════════════════════════════ */
+function renderWeather(w,fc){
+  const tz=w.timezone,cond=w.weather[0].main,t=w.main.temp;
+  const now=Date.now()/1000,isNight=now<w.sys.sunrise||now>w.sys.sunset;
+  const dayLen=(w.sys.sunset-w.sys.sunrise);
+  const sunFrac=Math.max(0,Math.min((now-w.sys.sunrise)/dayLen,1));
+
+  $('wcCity').textContent=w.name;$('wcCountry').textContent=w.sys.country;
+  $('wcTime').textContent=fmtNow(tz);
+  $('wcDate').textContent=new Date().toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'});
+  $('wcTemp').textContent=conv(t);$('wcUnit').textContent=uSfx();
+  $('wcFeels').textContent=conv(w.main.feels_like)+uSfx();
+  $('wcMax').textContent=conv(w.main.temp_max)+uSfx();$('wcMin').textContent=conv(w.main.temp_min)+uSfx();
+  $('wcDesc').textContent=w.weather[0].description.replace(/^\w/,c=>c.toUpperCase());
+  $('wcCond').textContent=cond+(isNight&&cond==='Clear'?' · Night':'');
+  $('wcHum').textContent=`${w.main.humidity}%`;
+  $('wcVis').textContent=w.visibility?`${(w.visibility/1000).toFixed(1)} km`:'—';
+  $('wcPres').textContent=`${w.main.pressure} hPa`;
+  $('wcCloud').textContent=`${w.clouds.all}%`;
+
+  renderWind(w.wind.speed,w.wind.deg||0,w.wind.gust);
+  renderSolar(w.sys.sunrise,w.sys.sunset,tz);
+  renderHumRing(w.main.humidity);
+  renderUV(Math.max(0,(10-w.clouds.all/15)*(isNight?0:1)));
+
+  const hi=hIdx(t,w.main.humidity);
+  $('hiVal').textContent=hi?`${conv(hi)}${uSfx()}`:'—';
+  $('hiDesc').textContent=hi?(hi>54?'Extremely Dangerous':hi>41?'Danger':hi>32?'Extreme Caution':hi>27?'Caution':'Comfortable'):'Below threshold';
+  const rain=w.rain?.['1h']||w.rain?.['3h']||0,snow=w.snow?.['1h']||w.snow?.['3h']||0;
+  $('precipVal').textContent=rain?`${rain} mm`:snow?`${snow} mm`:'0 mm';
+  $('precipDesc').textContent=rain?'Rain last hour':snow?'Snow last hour':'No precipitation';
+
+  if(fc){renderHourly(fc.list,tz);renderForecast(fc.list);}
+  renderMap(w.coord.lat,w.coord.lon,w.name,w.sys.country);
+  checkAlerts(cond,t,w.wind.speed);
+
+  // Sky!
+  sunX=W*(0.12+sunFrac*0.76);
+  sunY=H*(0.55-0.42*Math.sin(Math.PI*sunFrac));
+  setSky(cond,isNight,sunFrac);
+  setLottie(cond);
+
+  ['wCard','fcCard','miniRow','mapCard'].forEach(id=>$(id).classList.add('on'));
+  $('actRow').classList.add('on');
+  cache={w,fc};
+}
+
+/* ═══════════════════════════════════════════════
+   FETCH
+═══════════════════════════════════════════════ */
+async function fetchWeather(city=null,lat=null,lon=null){
+  setLoad(true);hideErr();
+  ['wCard','fcCard','miniRow','mapCard'].forEach(id=>$(id).classList.remove('on'));
+  $('actRow').classList.remove('on');$('alertBar').classList.remove('on');
+  try{
+    const base=city?`q=${encodeURIComponent(city)}`:`lat=${lat}&lon=${lon}`;
+    const [wR,fR]=await Promise.all([
+      fetch(`${OW}/weather?${base}&appid=${API_KEY}&units=metric`),
+      fetch(`${OW}/forecast?${base}&appid=${API_KEY}&units=metric`),
+    ]);
+    if(!wR.ok){
+      if(wR.status===404)throw new Error(`City "${city}" not found. Check the spelling.`);
+      if(wR.status===401)throw new Error('Invalid API key.');
+      throw new Error(`API error ${wR.status}.`);
+    }
+    const [w,fc]=await Promise.all([wR.json(),fR.json()]);
+    renderWeather(w,fc);
+    const name=w.name;
+    localStorage.setItem('rw_last',name);
+    $('lcName').textContent=name;$('lastChip').classList.add('vis');
+    lastCity=name;$('cityInput').value=name;
+  }catch(e){
+    showErr(e instanceof TypeError?'Network Error':'Weather Error',e instanceof TypeError?'Cannot reach the server. Check your connection.':e.message);
+  }finally{setLoad(false);}
+}
+
+/* ═══════════════════════════════════════════════
+   UNIT TOGGLE
+═══════════════════════════════════════════════ */
+function setUnit(u){unit=u;[$('btnC'),$('btnF'),$('btnK')].forEach(b=>b.classList.remove('on'));$('btn'+u).classList.add('on');if(cache)renderWeather(cache.w,cache.fc);}
+$('btnC').onclick=()=>setUnit('C');$('btnF').onclick=()=>setUnit('F');$('btnK').onclick=()=>setUnit('K');
+
+/* ═══════════════════════════════════════════════
+   EVENTS
+═══════════════════════════════════════════════ */
+$('searchBtn').addEventListener('click',()=>{const v=$('cityInput').value.trim();if(!v){shakeInput();return;}fetchWeather(v);});
+$('cityInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('searchBtn').click();});
+$('geoBtn').addEventListener('click',()=>{
+  if(!navigator.geolocation){showErr('Not Supported','Geolocation unavailable.');return;}
+  $('geoBtn').textContent='📍 Finding…';$('geoBtn').disabled=true;
+  navigator.geolocation.getCurrentPosition(
+    p=>{$('geoBtn').textContent='📍 Locate';$('geoBtn').disabled=false;fetchWeather(null,p.coords.latitude,p.coords.longitude);},
+    ()=>{$('geoBtn').textContent='📍 Locate';$('geoBtn').disabled=false;showErr('Denied','Allow location access or search manually.');}
+  );
+});
+document.querySelectorAll('.chip').forEach(c=>c.addEventListener('click',()=>{$('cityInput').value=c.dataset.city;fetchWeather(c.dataset.city);}));
+$('lastChip').addEventListener('click',()=>{const lc=localStorage.getItem('rw_last');if(lc){$('cityInput').value=lc;fetchWeather(lc);}});
+$('shareBtn').addEventListener('click',async()=>{
+  const city=$('cityInput').value.trim()||'Unknown';
+  const txt=`Weather in ${city}: ${$('wcTemp').textContent}${$('wcUnit').textContent} · ${$('wcCond').textContent} — R-Weathers`;
+  if(navigator.share){try{await navigator.share({title:'R-Weathers',text:txt});}catch(e){}}
+  else{await navigator.clipboard.writeText(txt);$('shareBtn').textContent='✅ Copied!';setTimeout(()=>$('shareBtn').textContent='🔗 Share',2200);}
+});
+$('refreshBtn').addEventListener('click',()=>{if(lastCity)fetchWeather(lastCity);});
+$('printBtn').addEventListener('click',()=>window.print());
+
+function shakeInput(){const s=document.querySelector('.s-shell');s.style.animation='shk .35s ease';setTimeout(()=>s.style.animation='',400);}
+const sk=document.createElement('style');sk.textContent=`@keyframes shk{0%,100%{transform:translateX(0)}25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}`;document.head.appendChild(sk);
+
+/* ═══════════════════════════════════════════════
+   CLOCK + INIT
+═══════════════════════════════════════════════ */
+function tick(){$('ftTime').textContent=new Date().toUTCString().slice(17,25)+' UTC';}
+tick();setInterval(tick,1000);
+
+(function init(){
+  const lc=localStorage.getItem('rw_last');
+  if(lc){$('lcName').textContent=lc;$('lastChip').classList.add('vis');lastCity=lc;fetchWeather(lc);}
+})();
+</script>
+</body>
+</html>
