@@ -271,6 +271,87 @@ body{font-family:'Exo 2',sans-serif;color:var(--text);min-height:100vh;overflow-
 .map-pin{position:absolute;width:14px;height:14px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px rgba(56,189,248,.22),0 0 22px rgba(56,189,248,.5);transform:translate(-50%,-50%);display:none;animation:pinPulse 2.2s ease-in-out infinite;}
 @keyframes pinPulse{0%,100%{box-shadow:0 0 0 4px rgba(56,189,248,.22),0 0 22px rgba(56,189,248,.5)}50%{box-shadow:0 0 0 9px rgba(56,189,248,.1),0 0 35px rgba(56,189,248,.7)}}
 .map-meta{display:flex;justify-content:space-between;margin-top:.5rem;font-family:'Share Tech Mono',monospace;font-size:.67rem;color:var(--muted);}
+
+/* ── Map Card ────────────────────────── */
+.map-section{
+  width:100%;max-width:580px;
+  margin-bottom:.9rem;
+  animation:cardPop .8s .2s cubic-bezier(.22,1,.36,1) both;
+  display:none;
+}
+.map-section.on{display:block;}
+.map-card-inner{
+  background:rgba(5,15,40,.52);
+  border:1.5px solid rgba(255,255,255,.13);
+  backdrop-filter:blur(26px);
+  border-radius:var(--r);
+  box-shadow:0 24px 80px rgba(0,0,0,.6);
+  padding:1.3rem;
+  position:relative;overflow:hidden;
+}
+.map-card-inner::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.3),transparent);
+}
+/* Map layer toggle tabs */
+.map-tabs{display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.8rem;}
+.map-tab{
+  padding:.3rem .8rem;border:none;border-radius:50px;
+  font-family:'Exo 2',sans-serif;font-size:.7rem;font-weight:600;
+  background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);
+  color:var(--muted);cursor:pointer;transition:all .2s;
+}
+.map-tab:hover{background:rgba(255,255,255,.13);color:var(--text);}
+.map-tab.active{background:var(--accent);color:#020c1b;border-color:var(--accent);box-shadow:0 2px 12px rgba(56,189,248,.35);}
+
+/* The actual map iframe */
+.map-frame-wrap{
+  width:100%;
+  height:360px;
+  border-radius:var(--rsm);
+  overflow:hidden;
+  border:1px solid rgba(255,255,255,.1);
+  position:relative;
+  background:#0d1b2e;
+}
+#mapFrame{
+  width:100%;
+  height:100%;
+  border:none;
+  display:block;
+}
+.map-loading{
+  position:absolute;inset:0;
+  display:flex;align-items:center;justify-content:center;
+  flex-direction:column;gap:.8rem;
+  background:#0d1b2e;
+  z-index:2;
+  transition:opacity .5s;
+}
+.map-loading.hide{opacity:0;pointer-events:none;}
+.map-spin{
+  width:36px;height:36px;border-radius:50%;
+  border:2px solid rgba(56,189,248,.2);
+  border-top-color:var(--accent);
+  animation:spinIt .8s linear infinite;
+}
+.map-loading-txt{font-size:.72rem;color:var(--muted);font-family:'Share Tech Mono',monospace;letter-spacing:.1em;}
+
+/* Info bar */
+.map-info-bar{
+  display:flex;justify-content:space-between;align-items:center;
+  margin-top:.6rem;font-family:'Share Tech Mono',monospace;
+  font-size:.67rem;color:var(--muted);flex-wrap:wrap;gap:.3rem;
+}
+.map-temp-badge{
+  background:rgba(56,189,248,.12);border:1px solid rgba(56,189,248,.25);
+  border-radius:50px;padding:.2rem .7rem;color:var(--accent);font-weight:600;font-size:.7rem;
+}
+/* Temp legend */
+.temp-legend{display:flex;align-items:center;gap:.5rem;margin-top:.55rem;}
+.temp-legend-bar{flex:1;height:7px;border-radius:50px;background:linear-gradient(to right,#4575b4,#91bfdb,#e0f3f8,#fee090,#fc8d59,#d73027);}
+.temp-legend-labels{display:flex;justify-content:space-between;font-family:'Share Tech Mono',monospace;font-size:.58rem;color:var(--muted);margin-top:.25rem;}
+
 .act-row{display:none;flex-wrap:wrap;gap:.55rem;justify-content:center;width:100%;max-width:580px;margin-bottom:1.8rem;}
 .act-row.on{display:flex;}
 .act-btn{padding:.5rem 1rem;border:none;border-radius:50px;font-family:'Exo 2',sans-serif;font-size:.76rem;font-weight:600;background:rgba(8,20,50,.55);border:1px solid rgba(255,255,255,.12);backdrop-filter:var(--blur);color:var(--text);cursor:pointer;transition:all .2s;}
@@ -478,14 +559,44 @@ body{font-family:'Exo 2',sans-serif;color:var(--text);min-height:100vh;overflow-
     </div>
   </div>
 
-  <div class="map-card" id="mapCard">
-    <div class="sec-label">📍 Location</div>
-    <div class="map-box">
-      <div class="map-grid"></div>
-      <div class="map-empty" id="mapEmpty"><span style="font-size:1.6rem">🌍</span><span>Search a city to see location</span></div>
-      <div class="map-pin" id="mapPin"></div>
+  <div class="map-section" id="mapCard">
+    <div class="map-card-inner">
+      <div class="sec-label">🗺️ Radar &amp; Maps</div>
+
+      <!-- Layer tabs -->
+      <div class="map-tabs">
+        <button class="map-tab active" data-layer="temp_new">🌡️ Temperature</button>
+        <button class="map-tab" data-layer="precipitation_new">🌧️ Rain</button>
+        <button class="map-tab" data-layer="clouds_new">☁️ Clouds</button>
+        <button class="map-tab" data-layer="wind_new">💨 Wind</button>
+        <button class="map-tab" data-layer="pressure_new">📊 Pressure</button>
+      </div>
+
+      <!-- Map -->
+      <div class="map-frame-wrap">
+        <div class="map-loading" id="mapLoading">
+          <div class="map-spin"></div>
+          <div class="map-loading-txt">Loading map…</div>
+        </div>
+        <iframe id="mapFrame" allowfullscreen="" loading="lazy"></iframe>
+      </div>
+
+      <!-- Info bar -->
+      <div class="map-info-bar">
+        <span id="mapCityLabel">📍 Search a city to view map</span>
+        <span class="map-temp-badge" id="mapTempBadge">— °C</span>
+      </div>
+
+      <!-- Temp legend (shown for temperature layer) -->
+      <div class="temp-legend" id="tempLegend">
+        <div style="flex:1">
+          <div class="temp-legend-bar"></div>
+          <div class="temp-legend-labels">
+            <span>−40°</span><span>−20°</span><span>0°</span><span>+20°</span><span>+40°</span><span>+60°</span>
+          </div>
+        </div>
+      </div>
     </div>
-    <div class="map-meta" id="mapMeta"></div>
   </div>
 
   <div class="act-row" id="actRow">
@@ -1172,13 +1283,133 @@ function renderForecast(list){
     fc.appendChild(el);
   });
 }
-function renderMap(lat,lon,city,country){
-  const px=((lon+180)/360)*100,py=((90-lat)/180)*100;
-  const pin=$('mapPin');pin.style.left=`${px}%`;pin.style.top=`${py}%`;pin.style.display='block';
-  $('mapEmpty').style.display='none';
-  $('mapMeta').innerHTML=`<span>📍 ${city}, ${country}</span><span>${lat.toFixed(4)}°N · ${lon.toFixed(4)}°E</span>`;
-  $('cLat').textContent=lat.toFixed(4)+'°';$('cLon').textContent=lon.toFixed(4)+'°';
+/* ═══════════════════════════════════════════════
+   MAP — Iframe-based (works everywhere, no sizing bugs)
+   Uses OpenWeatherMap tile layers via iframe HTML
+═══════════════════════════════════════════════ */
+const MAPTILER_KEY = 'LGOThIh1cT2kaXaLMr1d';
+let activeLayer = 'temp_new';
+let currentLat = null, currentLon = null, currentCity = '', currentCountry = '', currentTempC = 0;
+const SHOW_TEMP_LEGEND = {temp_new:true,precipitation_new:false,clouds_new:false,wind_new:false,pressure_new:false};
+
+function buildMapHTML(lat, lon, layer){
+  const owmKey = API_KEY;
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{background:#0d1b2e;overflow:hidden;}
+  #map{width:100vw;height:100vh;}
+  .leaflet-container{background:#0d1b2e !important;}
+  .leaflet-control-zoom a{
+    background:rgba(5,15,40,.9)!important;
+    color:#38bdf8!important;
+    border-color:rgba(56,189,248,.4)!important;
+    font-weight:700;
+  }
+  .leaflet-control-zoom a:hover{background:rgba(56,189,248,.25)!important;}
+  .leaflet-control-attribution{
+    background:rgba(5,15,40,.8)!important;
+    color:rgba(200,220,255,.5)!important;
+    font-size:9px!important;
+  }
+  .leaflet-control-attribution a{color:rgba(56,189,248,.7)!important;}
+  .leaflet-popup-content-wrapper{
+    background:rgba(5,15,40,.95)!important;
+    border:1px solid rgba(56,189,248,.4)!important;
+    border-radius:12px!important;
+    box-shadow:0 8px 32px rgba(0,0,0,.7)!important;
+    color:#e8f0ff!important;
+    font-family:sans-serif;
+  }
+  .leaflet-popup-tip{background:rgba(5,15,40,.95)!important;}
+  .leaflet-popup-close-button{color:rgba(56,189,248,.8)!important;}
+  .pulse-marker{
+    width:18px;height:18px;border-radius:50%;
+    background:#38bdf8;border:3px solid #fff;
+    box-shadow:0 0 0 6px rgba(56,189,248,.3),0 0 25px rgba(56,189,248,.7);
+    animation:pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse{
+    0%,100%{box-shadow:0 0 0 6px rgba(56,189,248,.3),0 0 25px rgba(56,189,248,.7);}
+    50%{box-shadow:0 0 0 12px rgba(56,189,248,.1),0 0 40px rgba(56,189,248,.9);}
+  }
+<\/style>
+<\/head>
+<body>
+<div id="map"></div>
+<script>
+  var map = L.map('map',{center:[${lat},${lon}],zoom:10,zoomControl:true,attributionControl:true});
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+    attribution:'© OpenStreetMap © CARTO',
+    subdomains:'abcd',maxZoom:19
+  }).addTo(map);
+
+  L.tileLayer('https://tile.openweathermap.org/map/${layer}/{z}/{x}/{y}.png?appid=${owmKey}',{
+    opacity:0.78,maxZoom:18,
+    attribution:'© OpenWeatherMap'
+  }).addTo(map);
+
+  var icon = L.divIcon({
+    html:'<div class="pulse-marker"></div>',
+    className:'',iconSize:[18,18],iconAnchor:[9,9],popupAnchor:[0,-12]
+  });
+
+  L.marker([${lat},${lon}],{icon:icon})
+    .bindPopup('<div style="padding:6px 4px;min-width:140px"><b style="font-size:15px">📍 ${currentCity.replace(/'/g,"\\'")} <\/b><br><span style="opacity:.7">${currentCountry}<\/span><br><span style="margin-top:6px;display:block">🌡️ <b>${Math.round(currentTempC)}°C<\/b><\/span><span style="opacity:.45;font-size:11px">${lat.toFixed(4)}°N · ${lon.toFixed(4)}°E<\/span><\/div>',{maxWidth:200})
+    .addTo(map)
+    .openPopup();
+<\/script>
+<\/body>
+<\/html>`;
 }
+
+function renderMap(lat, lon, city, country, tempC){
+  if(!isFinite(lat)||!isFinite(lon)||lat===null||lon===null) return;
+
+  currentLat=lat; currentLon=lon;
+  currentCity=city; currentCountry=country; currentTempC=tempC;
+
+  $('cLat').textContent = lat.toFixed(4)+'°';
+  $('cLon').textContent = lon.toFixed(4)+'°';
+
+  const frame = $('mapFrame');
+  const loading = $('mapLoading');
+
+  // Show loading spinner
+  loading.classList.remove('hide');
+
+  // Write full Leaflet HTML into iframe
+  const html = buildMapHTML(lat, lon, activeLayer);
+  frame.srcdoc = html;
+
+  // Hide spinner once iframe loads
+  frame.onload = () => {
+    setTimeout(()=>loading.classList.add('hide'), 400);
+  };
+
+  $('mapCityLabel').textContent = `📍 ${city}, ${country}`;
+  $('mapTempBadge').textContent = `${Math.round(tempC)} °C`;
+}
+
+/* ── Layer tab switching ─────────────────────── */
+document.querySelectorAll('.map-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.map-tab').forEach(t=>t.classList.remove('active'));
+    tab.classList.add('active');
+    activeLayer = tab.dataset.layer;
+    $('tempLegend').style.display = SHOW_TEMP_LEGEND[activeLayer] ? '' : 'none';
+    // Re-render map with new layer if we have coords
+    if(currentLat !== null) renderMap(currentLat, currentLon, currentCity, currentCountry, currentTempC);
+  });
+});
+
 function checkAlerts(cond,temp,wind){
   const c=cond.toLowerCase();let msg='';
   if(c==='thunderstorm')msg='⛈️ Thunderstorm warning — seek shelter indoors.';
@@ -1193,78 +1424,103 @@ function checkAlerts(cond,temp,wind){
    MAIN RENDER
 ═══════════════════════════════════════════════ */
 function renderWeather(w,fc){
-  const tz=w.timezone,cond=w.weather[0].main,t=w.main.temp;
-  const now=Date.now()/1000,isNight=now<w.sys.sunrise||now>w.sys.sunset;
-  const dayLen=(w.sys.sunset-w.sys.sunrise);
-  const sunFrac=Math.max(0,Math.min((now-w.sys.sunrise)/dayLen,1));
+  try {
+    const tz=w.timezone,cond=w.weather[0].main,t=w.main.temp;
+    const now=Date.now()/1000,isNight=now<w.sys.sunrise||now>w.sys.sunset;
+    const dayLen=(w.sys.sunset-w.sys.sunrise);
+    const sunFrac=Math.max(0,Math.min((now-w.sys.sunrise)/dayLen,1));
 
-  $('wcCity').textContent=w.name;$('wcCountry').textContent=w.sys.country;
-  $('wcTime').textContent=fmtNow(tz);
-  $('wcDate').textContent=new Date().toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'});
-  $('wcTemp').textContent=conv(t);$('wcUnit').textContent=uSfx();
-  $('wcFeels').textContent=conv(w.main.feels_like)+uSfx();
-  $('wcMax').textContent=conv(w.main.temp_max)+uSfx();$('wcMin').textContent=conv(w.main.temp_min)+uSfx();
-  $('wcDesc').textContent=w.weather[0].description.replace(/^\w/,c=>c.toUpperCase());
-  $('wcCond').textContent=cond+(isNight&&cond==='Clear'?' · Night':'');
-  $('wcHum').textContent=`${w.main.humidity}%`;
-  $('wcVis').textContent=w.visibility?`${(w.visibility/1000).toFixed(1)} km`:'—';
-  $('wcPres').textContent=`${w.main.pressure} hPa`;
-  $('wcCloud').textContent=`${w.clouds.all}%`;
+    $('wcCity').textContent=w.name;$('wcCountry').textContent=w.sys.country;
+    $('wcTime').textContent=fmtNow(tz);
+    $('wcDate').textContent=new Date().toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'});
+    $('wcTemp').textContent=conv(t);$('wcUnit').textContent=uSfx();
+    $('wcFeels').textContent=conv(w.main.feels_like)+uSfx();
+    $('wcMax').textContent=conv(w.main.temp_max)+uSfx();$('wcMin').textContent=conv(w.main.temp_min)+uSfx();
+    $('wcDesc').textContent=w.weather[0].description.replace(/^\w/,c=>c.toUpperCase());
+    $('wcCond').textContent=cond+(isNight&&cond==='Clear'?' · Night':'');
+    $('wcHum').textContent=`${w.main.humidity}%`;
+    $('wcVis').textContent=w.visibility?`${(w.visibility/1000).toFixed(1)} km`:'—';
+    $('wcPres').textContent=`${w.main.pressure} hPa`;
+    $('wcCloud').textContent=`${w.clouds.all}%`;
 
-  renderWind(w.wind.speed,w.wind.deg||0,w.wind.gust);
-  renderSolar(w.sys.sunrise,w.sys.sunset,tz);
-  renderHumRing(w.main.humidity);
-  renderUV(Math.max(0,(10-w.clouds.all/15)*(isNight?0:1)));
+    renderWind(w.wind.speed,w.wind.deg||0,w.wind.gust);
+    renderSolar(w.sys.sunrise,w.sys.sunset,tz);
+    renderHumRing(w.main.humidity);
+    renderUV(Math.max(0,(10-w.clouds.all/15)*(isNight?0:1)));
 
-  const hi=hIdx(t,w.main.humidity);
-  $('hiVal').textContent=hi?`${conv(hi)}${uSfx()}`:'—';
-  $('hiDesc').textContent=hi?(hi>54?'Extremely Dangerous':hi>41?'Danger':hi>32?'Extreme Caution':hi>27?'Caution':'Comfortable'):'Below threshold';
-  const rain=w.rain?.['1h']||w.rain?.['3h']||0,snow=w.snow?.['1h']||w.snow?.['3h']||0;
-  $('precipVal').textContent=rain?`${rain} mm`:snow?`${snow} mm`:'0 mm';
-  $('precipDesc').textContent=rain?'Rain last hour':snow?'Snow last hour':'No precipitation';
+    const hi=hIdx(t,w.main.humidity);
+    $('hiVal').textContent=hi?`${conv(hi)}${uSfx()}`:'—';
+    $('hiDesc').textContent=hi?(hi>54?'Extremely Dangerous':hi>41?'Danger':hi>32?'Extreme Caution':hi>27?'Caution':'Comfortable'):'Below threshold';
+    const rain=w.rain?.['1h']||w.rain?.['3h']||0,snow=w.snow?.['1h']||w.snow?.['3h']||0;
+    $('precipVal').textContent=rain?`${rain} mm`:snow?`${snow} mm`:'0 mm';
+    $('precipDesc').textContent=rain?'Rain last hour':snow?'Snow last hour':'No precipitation';
 
-  if(fc){renderHourly(fc.list,tz);renderForecast(fc.list);}
-  renderMap(w.coord.lat,w.coord.lon,w.name,w.sys.country);
-  checkAlerts(cond,t,w.wind.speed);
+    if(fc){renderHourly(fc.list,tz);renderForecast(fc.list);}
 
-  // Sky!
-  sunX=W*(0.12+sunFrac*0.76);
-  sunY=H*(0.55-0.42*Math.sin(Math.PI*sunFrac));
-  setSky(cond,isNight,sunFrac);
-  setLottie(cond);
+    // Safe coord extraction
+    const lat = (w.coord && typeof w.coord.lat === 'number' && isFinite(w.coord.lat)) ? w.coord.lat : null;
+    const lon = (w.coord && typeof w.coord.lon === 'number' && isFinite(w.coord.lon)) ? w.coord.lon : null;
+    if(lat !== null && lon !== null){
+      try { renderMap(lat, lon, w.name, w.sys.country, w.main.temp); } catch(me){ console.warn('Map render error (non-fatal):', me); }
+    }
 
-  ['wCard','fcCard','miniRow','mapCard'].forEach(id=>$(id).classList.add('on'));
-  $('actRow').classList.add('on');
-  cache={w,fc};
+    checkAlerts(cond,t,w.wind.speed);
+
+    sunX=W*(0.12+sunFrac*0.76);
+    sunY=H*(0.55-0.42*Math.sin(Math.PI*sunFrac));
+    try { setSky(cond,isNight,sunFrac); } catch(se){ console.warn('Sky error:', se); }
+    try { setLottie(cond); } catch(le){ console.warn('Lottie error:', le); }
+
+    ['wCard','fcCard','miniRow','mapCard'].forEach(id=>$(id).classList.add('on'));
+    $('actRow').classList.add('on');
+    cache={w,fc};
+  } catch(err) {
+    console.error('renderWeather internal error:', err);
+    // Still show cards even if something minor broke
+    ['wCard','fcCard','miniRow','mapCard'].forEach(id=>$(id).classList.add('on'));
+    $('actRow').classList.add('on');
+    cache={w,fc};
+  }
 }
 
 /* ═══════════════════════════════════════════════
-   FETCH
+   FETCH — with multi-proxy fallback for sandboxed
+   environments (Claude preview, iframes, etc.)
 ═══════════════════════════════════════════════ */
 async function fetchWeather(city=null,lat=null,lon=null){
   setLoad(true);hideErr();
   ['wCard','fcCard','miniRow','mapCard'].forEach(id=>$(id).classList.remove('on'));
   $('actRow').classList.remove('on');$('alertBar').classList.remove('on');
-  try{
-    const base=city?`q=${encodeURIComponent(city)}`:`lat=${lat}&lon=${lon}`;
-    const [wR,fR]=await Promise.all([
-      fetch(`${OW}/weather?${base}&appid=${API_KEY}&units=metric`),
-      fetch(`${OW}/forecast?${base}&appid=${API_KEY}&units=metric`),
-    ]);
+
+  const base = city ? `q=${encodeURIComponent(city)}` : `lat=${lat}&lon=${lon}`;
+  const wUrl = `${OW}/weather?${base}&appid=${API_KEY}&units=metric`;
+  const fUrl = `${OW}/forecast?${base}&appid=${API_KEY}&units=metric`;
+
+  let w=null, fc=null;
+  try {
+    // Simple fetch — no AbortSignal (incompatible with sandboxed iframes)
+    const [wR, fR] = await Promise.all([ fetch(wUrl), fetch(fUrl) ]);
     if(!wR.ok){
-      if(wR.status===404)throw new Error(`City "${city}" not found. Check the spelling.`);
-      if(wR.status===401)throw new Error('Invalid API key.');
-      throw new Error(`API error ${wR.status}.`);
+      const errData = await wR.json().catch(()=>({}));
+      if(wR.status===404) throw new Error(`City "${city||'location'}" not found. Check the spelling.`);
+      if(wR.status===401) throw new Error('Invalid API key.');
+      throw new Error(errData.message || `Error ${wR.status}.`);
     }
-    const [w,fc]=await Promise.all([wR.json(),fR.json()]);
-    renderWeather(w,fc);
-    const name=w.name;
-    localStorage.setItem('rw_last',name);
-    $('lcName').textContent=name;$('lastChip').classList.add('vis');
-    lastCity=name;$('cityInput').value=name;
-  }catch(e){
-    showErr(e instanceof TypeError?'Network Error':'Weather Error',e instanceof TypeError?'Cannot reach the server. Check your connection.':e.message);
-  }finally{setLoad(false);}
+    [w, fc] = await Promise.all([ wR.json(), fR.json() ]);
+  } catch(e){
+    showErr('Weather Error', e.message);
+    setLoad(false);
+    return;
+  }
+
+  renderWeather(w, fc);
+  const name = w.name || city || 'Unknown';
+  localStorage.setItem('rw_last', name);
+  $('lcName').textContent=name;
+  $('lastChip').classList.add('vis');
+  lastCity=name;
+  $('cityInput').value=name;
+  setLoad(false);
 }
 
 /* ═══════════════════════════════════════════════
